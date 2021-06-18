@@ -2,9 +2,45 @@
 % Packages
 % ----------------------------------------
 
-% 
+%
 % Place here your \usepackage's. Some recommended packages are already included.
 %
+
+
+\usepackage{lipsum}
+% \usepackage{todonotes}
+\usepackage{marginnote}
+\usepackage{marginfit}
+\usepackage{enotez}
+\setenotez{
+  backref=true,
+  }
+\usepackage{outlines}
+
+
+
+% ----------------------------------------
+% Comments and TODOs:
+% ----------------------------------------
+
+% Uncomment this to remove all comments
+% \newcommand{\nocomments}{}
+
+% Uncomment this to remove all TODOs
+% \newcommand{\notodos}{}
+
+% Comments and TODOs
+% \newcommand{\fcomment}[2]{\ifdefined\nocomments{}\else\footnote{\textcolor{red}{#1:} #2}\fi}
+% % \newcommand{\todo}[1]{\ifdefined\notodos{}\else\textcolor{red}{TODO\ifstrempty{#1}{}{: #1}}\fi}
+% \newcommand{\ftodo}[1]{\ifdefined\notodos{}\else\fcomment{TODO}{#1}\fi}
+
+\newcommand{\side}[1]{\ifdefined\nocomments{}\else\marginpar{
+  \raggedright \setstretch{1.0} \footnotesize\textcolor{red}{#1} }\fi}
+
+\newcommand{\sideline}[1]{\ifdefined\nocomments{}\else\marginnote{
+  \raggedright \setstretch{1.0} \footnotesize\textcolor{red}{#1} }\fi}
+
+
 
 % Graphics:
 \usepackage[final]{graphicx}
@@ -263,3 +299,5 @@
 %%% mode: latex
 %%% TeX-master: "thesis"
 %%% End:
+
+\usepackage[capitalise,nameinlink]{cleveref}

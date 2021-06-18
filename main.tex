@@ -3,6 +3,7 @@
 %% NYU PhD thesis template.
 %% Created by José Koiller 2007--2008.
 %% Modified by Siddharth Krishna, 2019.
+%% Template available at https://github.com/siddharth-krishna/nyu-thesis-template
 %%
 %% ----------------------------------------
 
@@ -31,16 +32,16 @@
 
 %% Replace the title, name, advisor name, graduation date and dedication below
 %% with your own. Graduation months must be January, May or September.
-\newcommand{\thesistitle}{On Complete Systems of Invariants for Ternary Biquadratic Forms}
-\newcommand{\thesisauthor}{Amalie Emmy Noether}
-\newcommand{\thesisadvisor}{Professor Paul Gordan}
-\newcommand{\thesisdept}{Mathematics}
+\newcommand{\thesistitle}{Techniques for Sample-Efficient Reinforcement Learning}
+\newcommand{\thesisauthor}{William Fairclough Whitney}
+\newcommand{\thesisadvisor}{Professor Kyunghyun Cho}
+\newcommand{\thesisdept}{Computer Science}
 \newcommand{\gradmonth}{September}
-\newcommand{\gradyear}{2019}
+\newcommand{\gradyear}{2021}
+
 %% If you do not want a dedication, scroll down and comment out
 %% the appropriate lines in this file.
 \newcommand{\thesisdedication}{To my dog Weierstra\ss, with affection.}
-
 
 % ----------------------------------------
 % Layout and formatting
@@ -49,9 +50,6 @@
 % Uncomment to get a big black box to spot "overfull hboxes"
 % \setlength{\overfullrule}{5pt}
 
-
-%% Page layout (customized to letter paper and NYU requirements):
-\RequirePackage[margin=1in, includefoot, letterpaper]{geometry}
 
 
 %% Color definitions:
@@ -114,7 +112,15 @@
 %% Use the following commands, if desired, during production.
 %% Comment them out for final version.
 %\usepackage{layout} % defines the \layout command, see below
-%\setlength{\hoffset}{-.75in} % creates a large right margin for notes and \showlabels
+% TODO: remove this
+% \usepackage{geometry}
+% \geometry{
+  %   right=2in,
+  % }
+\usepackage[margin=1in, includefoot, letterpaper]{geometry}
+\geometry{marginpar=1.6in}
+\setlength{\hoffset}{-.75in} % creates a large right margin for notes and \showlabels
+%% Page layout (customized to letter paper and NYU requirements):
 
 %% Controls spacing between lines (\doublespacing, \onehalfspacing, etc.):
 \usepackage{setspace}
@@ -126,28 +132,7 @@
   \doublespacing % requires package setspace, invoked above
 }
 
-%% For generating sample text.
-%% Can be removed when you've replaced all \lipsum commands with your text.
-\usepackage{lipsum}
 
-
-% ----------------------------------------
-% Comments and TODOs:
-% ----------------------------------------
-
-% % Uncomment this to remove all comments
-% \newcommand{\nocomments}{}
-
-% % Uncomment this to remove all TODOs
-% \newcommand{\notodos}{}
-
-% % Comments and TODOs
-% \newcommand{\fcomment}[2]{\ifdefined\nocomments{}\else\footnote{\textcolor{red}{#1:} #2}\fi}
-% \newcommand{\todo}[1]{\ifdefined\notodos{}\else\textcolor{red}{TODO\ifstrempty{#1}{}{: #1}}\fi}
-% \newcommand{\ftodo}[1]{\ifdefined\notodos{}\else\fcomment{TODO}{#1}\fi}
-
-% % Author comments:
-% \newcommand{\aen}[1]{\fcomment{Emmy}{#1}}
 
 
 % ----------------------------------------
@@ -159,16 +144,22 @@
 \input{defs}
 
 
+
 % ----------------------------------------
 % Document header
 % ----------------------------------------
 
 %% Cross-referencing utilities. Use one or the other--whichever you prefer--
 %% but comment out both lines for final version.
-%\usepackage{showlabels}
-%\usepackage{showkeys}
+\usepackage{showlabels}
+% \usepackage{showkeys}
+
 
 \begin{document}
+\side{remove showlabels}
+\side{remove offset}
+\side{set nocomments}
+
 %% Produces a test "layout" page, for "debugging" purposes only.
 %% Comment out for final version.
 %\layout % requires package layout (see above, on this same file)
@@ -233,7 +224,7 @@
 \addcontentsline{toc}{chapter}{Dedication}
 \vspace*{\fill}
 \begin{center}
-  \thesisdedication
+  \thesisdedication \sideline{add dedication}
 \end{center}
 \vfill
 \newpage
@@ -245,8 +236,8 @@
 \chapter*{Acknowledgements}
 \addcontentsline{toc}{chapter}{Acknowledgments}
 
-% \input{acknowledge}
-% \lipsum[1-2]
+\input{content/acknowledgements}
+
 
 \newpage
 
@@ -255,7 +246,7 @@
 \chapter*{Abstract}
 \addcontentsline{toc}{chapter}{Abstract}
 
-\input{abstract}
+\input{content/abstract}
 
 \newpage
 
@@ -290,30 +281,12 @@
 \pagenumbering{arabic} % switches page numbering to arabic: 1, 2, 3, etc.
 
 
+
 % ----------------------------------------
 % Body of Thesis
 % ----------------------------------------
 
-\chapter{Introduction}
-\label{chp-introduction}
-
-% \input{introduction}
-
-
-
-%%%%% Appendices start %%%%%%%%%%%%%%%%
-%% Comment out the following if your thesis has no appendix
-
-\appendix
-
-\chapter{Appendix}
-
-% \input{appendix}
-
-%% Note: If your thesis has more than one appendix, NYU requires a "list of
-%% appendices" page before the body of the thesis. I don't provide the tools
-%% to create that here, so you're on your own for that one... Sorry.
-
+\input{body}
 
 %%%% Input bibliography file %%%%%%%%%%%%%%%
 %% For computer science dissertations, I'd recommend using the bibly package
@@ -325,13 +298,9 @@
 \bibliographystyle{apalike}
 \addcontentsline{toc}{chapter}{Bibliography}
 
-% \bibliography{dblp,references}
+\bibliography{references}
+
 
 
 
 \end{document}
-
-%%% Local Variables:
-%%% mode: latex
-%%% TeX-master: t
-%%% End:

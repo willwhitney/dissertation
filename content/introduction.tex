@@ -1,0 +1,122 @@
+
+Reinforcement learning (RL) provides a framework for systems which learn to make decisions under uncertainty about their environment.
+Such a system must simultaneously determine which of all possible environments it is interacting with and solve for an optimal strategy in that environment.
+This uncertainty is the core challenge of reinforcement learning, and one of the most fundamental questions of the field is how much experience a learning system requires to resolve its uncertainty and perform well.
+We call this the sample complexity of reinforcement learning.
+
+Classically reinforcement learning was restricted to environments with small, countable state and action spaces.\endnote{Or more accurately, environments admitting assumptions that allow them to be treated as such. A 2-D continuous state space can be treated as a discrete grid of states with arbitrarily little waste under the assumption that the environment changes sufficiently slowly, for example.}
+In this setting a variety of algorithms were developed with robust guarantees on their performance relative to the ideal policy and on the amount of data required to approach perfect behavior.
+Bandit algorithms for environments without temporal dependence and dynamic programming for those with non-trivial dynamics both yielded practical success.
+However, the specter of exponentially-increasing sample complexity limited these approaches to low-dimensional settings.
+
+The combination of deep learning with reinforcement learning in the last decade has given rise to the new subfield of "deep reinforcement learning", which leverages function approximation to scale reinforcement learning to tasks with large or uncountable state or action spaces.
+Deep reinforcement learning has led to dramatic results across a range of domains, from board games like Go to complex multiplayer computer games like StarCraft, from controlling automated balloons to manipulating Rubik's cubes, and even to abstract tasks like chip design.
+
+A key unifying feature of these most impressive deep RL results is the availability of simulators.
+Each of these domains admits the construction of a simulation of sufficient fidelity that a policy may be trained in simulation and then deployed on the real task with little to no fine tuning.
+Furthermore, these simulations are inexpensive relative to collecting "real" data, reducing the cost of training a policy by orders of magnitude.
+By turning data collection into computation, simulation freed deep RL from paying attention to sample efficiency, as it was more important how computationally fast an algorithm was than how many hours or years of (virtual) experience it consumed.\endnote{Of course, not everyone in the deep RL community ignores sample efficiency. Notably many people working on robotics have maintained remarkable discipline in only running simulated benchmarks for physically plausible amounts of time, but there is also a small but vibrant community working on reaching human Atari performance with human-like amounts of experience.}
+
+
+
+\section{The Cost of Free Data}
+
+Our reliance on simulation comes with hidden costs.
+Simulation-based RL has generated spectacular results, and simulation should be a primary tool in any effort to solve a real-world task.
+However, the availability of cheap simulation has shaped what the deep RL community studies by reinforcing work on simulatable domains and the large-data regime.
+This has resulted in slower progress on questions in the sample-limited regime.
+Sample-efficient reinforcement learning is important due to the fundamental scientific importance of understanding sample complexity and the intractibility of simulating every domain of interest.
+
+
+\paragraph{Sample complexity is foundational.}
+The study of sample complexity in reinforcement learning addresses fundamental questions about what information is needed to reliably solve a problem.
+The observation that realistic, high-dimensional tasks are solvable with small sample sizes may be surprising, given that there are theoretical lower bounds requiring a number of samples which is linear in the number of states or exponential in the horizon \citep{Du2020IsAG}.
+This disagreement requires explanation, and it suggests that real-world problems contain a significant amount of structure which makes them easier to solve.
+Understanding this structure in more detail, as well as how it interacts with the inductive biases of the function approximators we use, could lead to significant breakthroughs.
+
+
+\paragraph{Simulators are expensive.}
+While many simulators already exist that are computationally inexpensive, many important systems of interest are computationally difficult to simulate with sufficient precision for transfer to the real world.
+Simulations of fluid dynamics, deformable materials, and large numbers of contacts (to name a few) can be significantly slower than real-time.
+Furthermore, the development of new realistic simulators is \emph{financially} expensive not only because of the engineering of the simulator itself, but additionally due to the need to create and maintain a close correspondence between the simulation and the physical system of interest.
+These costs inhibit the use of simulators for domains which are too complex or too niche.
+
+\vspace{0.9\baselineskip}
+
+This thesis consists of work done in the last several years which makes deep RL somewhat more capable in the sample-limited regime.
+With this line of work I hope to unlock the wide range of environments which currently lack high-fidelity simulators.
+Beyond simply enabling RL in more complex environments, improvements to sample efficiency has the potential to allow agents to adapt on the fly to the specifics of the environment or objectives they interact with.
+A home robot might come to know the best way to pick up \emph{your} cups, or an automated factory could produce more rapidly over the course of a production run as the networked assembly arms pool experience about manipulating each component part.
+In these settings learning more efficiently can be directly translated into consumer experience and dollars saved.
+
+
+
+% \section{Defining Sample Complexity}
+
+% Intuitively the sample complexity
+% For the purposes of this work, I will define sample complexity as follows.
+
+% \begin{definition}[Sample complexity]
+% The sample complexity $L$ of
+% \end{definition}
+
+
+
+% \section{The Components of Sample-Efficient RL}
+
+% Reinforcement learning can be thought of as comprising two distinct processes: data collection and policy optimization.
+% Data collection, also known as \emph{exploration}, is when the agent interacts with the environment in order to gain more information about the optimal policy.
+% Policy optimization is the process of using data collected from the environment to produce a policy that achieves as much reward as possible.
+% There are three main variations on the RL setting which lead to interactions between these two steps: the \emph{online} or \emph{regret} setting, the \emph{learn-and-deploy} setting, and the \emph{offline} or \emph{batch} setting.
+% These settings are discussed in more detail in \Cref{sec:regret-deployment}.
+
+% For the overall reinforcement learning process to be as sample-efficient as possible, data collection and policy optimization must both themselves be efficient.
+% Efficient data collection
+
+
+
+
+
+\section{Elements of Sample-Efficient Learning}
+
+Reinforcement learning can be thought of as comprising two distinct processes: data collection and policy optimization.
+Data collection, also known as \emph{exploration}, is when the agent interacts with the environment in order to gain more information about the optimal policy.
+Policy optimization is the process of using data collected from the environment to produce a policy that achieves as much reward as possible.
+There are three main variations on the RL setting which lead to interactions between these two steps: the \emph{online} or \emph{regret} setting, the \emph{learn-and-deploy} setting, and the \emph{offline} or \emph{batch} setting.
+These settings are discussed in more detail in \Cref{sec:regret-deployment}.
+In order that an RL algorithm overall be sample efficient, both exploration and policy optimization must themselves be efficient.
+
+Efficient exploration means rapidly acquiring information about the optimal policy.
+This means collecting data that is diverse, such that valuable states and actions will be quickly uncovered, but also biasing data collection towards states and actions which are more likely to be optimal.
+If done well exploration spans the environment and then collects evidence to allow the agent to discard poor policies and differentiate between actions which are optimal and those which are merely good.
+
+Efficient policy optimization means squeezing as much performance as possible out of the data which is currently available.
+While this is often discussed in the narrow frame of model-free RL, this process might include building models, learning representations, or even meta-learning.
+In principle one might hope to feed some prior beliefs along with whatever data has been collected from the environment and get back the best policy which is supported by that data.
+Recent work in off-policy RL and the offline RL setting have made progress towards this vision, but it remains some way off.
+
+
+
+\section{Overview}
+
+This thesis consists of work on improving the sample efficiency of reinforcement learning through three main directions: (1) collecting more diverse data without confounding policy learning; (2) learning representations which capture structure in the environment; and (3) studying policy optimization in the batch setting to develop policy improvement operators that are robust to limited data.
+The motivating challenge through much of this work is robotic manipulation using low-dimensional positions or high-dimensional images as observations and with continuous-valued action spaces.
+However, the findings described here are applicable more widely across reinforcement learning.
+
+The rest of the thesis is organized as follows:
+\begin{itemize}
+    \item \Cref{sec:rl-settings} introduces background on the problem of sample-efficient RL and how it relates to the several settings under which RL has been studied.
+    \item \Cref{sec:exploration} describes the role of exploration in sample-efficient RL, with \Cref{sec:deep} illustrating how exploration techniques adapted from deep RL to the sample-limited robotic setting can improve sample efficiency and performance.
+    \item \Cref{sec:representation} discusses the role of representation in reinforcement learning, with connections to representation learning more generally in \Cref{sec:representation-eval} and work on representations for sample-efficient RL in \Cref{sec:dyne}.
+    \item \Cref{sec:offline} studies policy optimization in the offline setting, first describing the impact of overparaterized models in offline bandit problems in \Cref{sec:offline-bandits}, then studying the repeated application of policy improvement operators in the full offline RL problem in \Cref{sec:offline-rl}.
+\end{itemize}
+
+
+
+
+
+
+
+
+
+\printendnotes

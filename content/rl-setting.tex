@@ -1,0 +1,26 @@
+\section{Notation}
+
+
+\section{Regret and Deployment} \label{sec:regret-deployment}
+
+Reinforcement learning actually consists of several different settings.
+
+\side{break into \textbackslash paragraphs}
+\side{write math definitions}
+\side{write sample complexity definitions}
+\begin{itemize}
+    \item The \emph{online} or \emph{regret} setting.
+    Here an RL agent learns by continually interacting with the environment with the goal of maximizing the total reward earned across all time. This gives rise to the explore-exploit tradeoff when acting: at each moment, the agent may choose to take an action which is uninformative but leads to greater short-term reward, or one which will yield more information at the cost of lower reward.
+    \item The \emph{learn-and-deploy} setting.
+    \side{Need a better name for learn-and-deploy}
+    This setting consists of distinct learning and deployment phases. In the learning phase, the agent is not required to perform well and may collect whatever data is most informative. In the deployment phase, the policy is fixed and should be as close to optimal as possible. This setting schematically breaks down into pure data collection followed by pure policy optimization, though in practice policy optimization is an essential tool during exploration.
+    \item The \emph{offline} or \emph{batch} setting.
+    This consists only of pure policy optimization given a fixed dataset of environment interactions collected by an extrinsic behavior policy. After learning from this data in whatever way it sees fit, an algorithm produces a fixed policy with the objective of earning as much reward as possible. Though described as a reinforcement learning setting, it does not include any actual reinforcement as the agent never learns from its own interactions with the environment. However, this makes the offline RL setting uniquely valuable for isolating how much can be learned from particular data.
+\end{itemize}
+
+
+
+\section{Simulated and Physical Environments}
+
+\section{Discounting}
+
