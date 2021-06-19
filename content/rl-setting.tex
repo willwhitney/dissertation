@@ -1,26 +1,117 @@
 \section{Notation}
 
+A Markov decision process (MDP) $\mdp$ consists of a tuple $(\mathcal{S}, \mathcal{A}, P, R, \gamma, s_0)$, where $\mathcal{S}$ is the state space, $\mathcal{A}$ is the action space, $P$ is the transition function mapping $\mathcal{S} \times \mathcal{A}$ to distributions on $\mathcal{S}$, $R$ is the scalar reward function on $\mathcal{S} \times \mathcal{A}$, $\gamma$ is the discount factor, and $s_0$ is the starting state.
+Note that a single start state can be converted to a start distribution by letting $P(s_0, \cdot)$ be independent of the action taken.
+% This work focuses on the episodic setting, where after some number of steps $T$
+An \emph{agent} interacts with an MDP by producing a policy $\pi$ at each timestep and observing the transitions it visits.
 
-\section{Regret and Deployment} \label{sec:regret-deployment}
-
-Reinforcement learning actually consists of several different settings.
-
-\side{break into \textbackslash paragraphs}
-\side{write math definitions}
-\side{write sample complexity definitions}
-\begin{itemize}
-    \item The \emph{online} or \emph{regret} setting.
-    Here an RL agent learns by continually interacting with the environment with the goal of maximizing the total reward earned across all time. This gives rise to the explore-exploit tradeoff when acting: at each moment, the agent may choose to take an action which is uninformative but leads to greater short-term reward, or one which will yield more information at the cost of lower reward.
-    \item The \emph{learn-and-deploy} setting.
-    \side{Need a better name for learn-and-deploy}
-    This setting consists of distinct learning and deployment phases. In the learning phase, the agent is not required to perform well and may collect whatever data is most informative. In the deployment phase, the policy is fixed and should be as close to optimal as possible. This setting schematically breaks down into pure data collection followed by pure policy optimization, though in practice policy optimization is an essential tool during exploration.
-    \item The \emph{offline} or \emph{batch} setting.
-    This consists only of pure policy optimization given a fixed dataset of environment interactions collected by an extrinsic behavior policy. After learning from this data in whatever way it sees fit, an algorithm produces a fixed policy with the objective of earning as much reward as possible. Though described as a reinforcement learning setting, it does not include any actual reinforcement as the agent never learns from its own interactions with the environment. However, this makes the offline RL setting uniquely valuable for isolating how much can be learned from particular data.
-\end{itemize}
+The \emph{value} of a state $s$ for a policy $\pi$ is the (discounted) sum of future rewards obtained by running that policy starting from the state $s$:
+\begin{align}
+    V^{\pi}(s) = \E_{\substack{a_t \sim \pi(\cdot \mid s_t) \\ s_{t+1} \sim P(s_t, a_t)}} \sum_{t=0}^\infty \gamma^t R(s_t, a_t) ~\big|~ s_0=s
+\end{align}
+Similarly the value of a state-action pair $(s, a)$ is written as
+\begin{align}
+    Q^{\pi}(s, a) = \E_{\substack{a_t \sim \pi(\cdot \mid s_t) \\ s_{t+1} \sim P(s_t, a_t)}} \sum_{t=0}^\infty \gamma^t R(s_t, a_t) ~\big|~ s_0=s, a_0 = a
+\end{align}
+Any MDP admits a deterministic optimal policy $\pi^*$ with corresponding value functions $V^*$ and $Q^*$ such that $V^*(s) \ge V^\pi(s)$ for all $s$ and $\pi$ \citep{sutton2018reinforcement}.
 
 
+\section{Discounting and Resets}
 
-\section{Simulated and Physical Environments}
+When $\gamma < 1$ we say that the setting is \emph{discounted}, and for $\gamma = 1$ we say that it is \emph{undiscounted}.
+An environment may have a time limit $T$ such that after every $T$ steps, the state is reset to $s_0$.
+In this case we call it \emph{episodic}.
+To satisfy the Markov property, episodic environments should include the current timestep $t$ in the state.
 
-\section{Discounting}
+For episodic environments, it is natural to define a policy's quality in terms of the total reward earned (on average) in a single episode, with discounted environments preferring rewards obtained earlier in the episode.
+For non-episodic environments comparisons between policies are less clear-cut; see Section 2 of \citet{strehl2008analysis} for a discussion.
 
+Common practice in deep reinforcement learning is to train agents with discounting and resets, but not include the timestep in the state observations and simply ignore the transition from $s_T$ to $s_0$.
+Policies are typically evaluated by the total undiscounted reward in an episode, despite the conflict with the training setup.
+In most cases the rewards are truncated to reflect the limited episode duration \citep{schulman2017proximal,Fujimoto2018AddressingFA,haarnoja2018softA}.
+Since the agent is unable to tell when an episode will end, this effectively introduces noise into value prediction targets, and this noise varies by state depending on how often the agent has ended an episode on that state.
+In other cases value targets may be bootstrapped from the state $s_T$ as if the environment were not episodic.
+This has two issues: (1) it introduces bias by treating an estimate of $V(s_T)$ as the true value, when in some states and environments this estimate may never be updated; and (2) by pretending the environment has no resets, it introduces a mismatch between the training and test objectives.\endnote{This mismatch is decreased if the divergence between the distributions $P(s_T, \pi(\cdot \mid s_T))$ and $s_0$ is smaller. Like most problems in RL, it also becomes smaller if smaller discount factors are used. However in general there are actions which would provide more short-term reward, and thus perform better toward the end of an episode, than the infinite-horizon optimal actions.}
+However, it does not introduce noise.
+
+More fundamentally, practically all discounted policy gradient algorithms drop the discounting term from the state distribution.
+\citet{Nota2020IsTP} show that this results in following a direction which is not the gradient of any function, and which is not guaranteed to converge to a good solution with respect to the discounted or undiscounted objectives.
+While this is deeply worrying, these methods frequently work well in practice.
+This may be due to their usage with overparameterized neural network models, which are largely invariant to a reweighting of the data \citep{byrd2018effect,brandfonbrener2021offline}.
+
+% This thesis focuses on the episodic setting.
+% Following common practice in deep reinforcement learning, agents are trained with algorithms which use $\gamma < 1$, but evaluated according to the total reward earned in an episode.
+
+
+\section{Defining Sample Complexity}
+
+We say that a policy $\pi$ is $\varepsilon$-optimal if $V^*(s_0) \le V^\pi(s_0) + \varepsilon$.
+Define $\bm{\pi} = A(\mdp, i)$ to be the policy obtained by running the agent (i.e. algorithm) $A$ in the environment $\mdp$ for $i$ timesteps, being careful to note that the policy $\bm{\pi}$ is itself a random variable due to the randomness in the experience collected in those $i$ steps.
+Let the \emph{sample complexity} of learning a $\varepsilon$-optimal policy on $\mdp$ with $A$ be the expected number of steps (indexed as $i$) such that
+\begin{align}
+    V^{\pi_i}(s_0) < V^*(s_0) \le - \varepsilon, && \text{where } \pi_i = A(\mdp, i).
+\end{align}
+This definition is related to those proposed by \citet{Fiechter1994EfficientRL} and \citet{strehl2008analysis} for PAC learning.
+Sometimes it is also useful to consider the "anytime" performance of an algorithm $A$ on an MDP $\mdp$.
+An algorithm $A_1$ would dominate $A_2$ if $\forall i$, $V^{A_1(\mdp, i)}(s_0) \ge V^{A_2(\mdp, i)}(s_0)$.
+
+
+
+\section{Settings with Regret and Deployment} \label{sec:regret-deployment}
+
+While the overall MDP framework is largely shared in the community, several different objectives for a learning agent are commonly studied.
+
+\paragraph{The online setting.}
+Here an RL agent learns by continually interacting with the environment with the goal of maximizing the total reward earned across all time.
+This gives rise to the explore-exploit tradeoff when acting: at each moment, the agent may choose to take an action which is uninformative but leads to greater short-term reward, or one which will yield more information at the cost of lower reward.
+The objective for this setting is to minimize the rate of accumulation of \emph{regret}, which measures the difference between the total reward obtained by an optimal policy and the agent:
+\begin{align}
+    L(A, \mdp, T) = \E \left[ \sum_{i=1}^T R(s^*_i, a^*_i) - R(s_i, a_i) \right].
+\end{align}
+This setting is appropriate when an agent is being trained "on the job," where mistakes early in learning have just as much deleterious effect as those made later.
+
+
+\paragraph{The learn-and-deploy setting.}
+This setting consists of distinct learning and deployment phases.
+In the learning phase, the agent is not required to perform well and may collect whatever data is most informative.
+In the deployment phase, the policy is fixed and should be as close to optimal as possible.
+Note that the policy produced at the end of the training procedure need bear no resemblance to those used to collect data.
+For episodic environments, with a training period consisting of $N$ steps we can write the this objective as
+\begin{align}
+    L(A, \mdp, N) = V^*(s_0) - V^{\pi_N}(s_0), && \text{where } \pi_N = A(\mdp, N)
+\end{align}
+Historically this setting has not been much discussed, though it is analagous to the task of best-arm identification in bandits \citep{Russo2016SimpleBA,Kaufmann2016OnTC}.
+It is also related to the iterative technique of fitted Q iteration \citep{Ernst2005TreeBasedBM,Riedmiller2005NeuralFQ}.
+
+Crucially, this setting is the one used in practice in nearly every application of reinforcement learning.
+RL algorithms are not yet safe and reliable enough to allow them to update a policy on the fly, especially with a physical system which may be damaged or cause injury.
+Furthermore, most works studying RL implicitly provide results in this setting by evaluating according to a different policy than the one used for training, for example showing learning curves with a deterministic policy \citep{Mnih2015HumanlevelCT,Lillicrap2016ContinuousCW,Fujimoto2018AddressingFA,haarnoja2018softA}.
+Comparisons of final, large-data performance similarly reflect this setting \citep{Silver2016MasteringTG,Vinyals2019GrandmasterLI,openai2019dota,OpenAI2019SolvingRC}.
+
+
+\paragraph{The offline setting.}
+Also known as the \emph{batch} setting, this consists only of pure policy optimization given a fixed dataset of environment interactions collected by an extrinsic behavior policy.
+After learning from this data in whatever way it sees fit, an algorithm produces a fixed policy with the objective of earning as much reward as possible.
+Though described as a reinforcement learning setting, it does not include any actual reinforcement as the agent never learns from its own interactions with the environment.
+However, this makes the offline RL setting uniquely valuable for isolating how much can be learned from particular data.
+This setting is also appealing as it would in principle allow an agent to be trained in a risk-free way by using data collected from a safe policy, and for free (in terms of samples) if data from one experiment can be repurposed as training data for another.\endnote{While there are doubtless some settings where this cross-task data reuse is possible, it has quite clear limits. For a policy to be trained to solve task B using data collected from task A, the policy used for task A would have had to actually also solve task B. It could have been done piecewise rather than in a single good trajectory, but unless the tasks are extremely similar it is vanishingly unlikely. Perhaps a more practical application would be to start with a safe but poor policy for solving a task, then incrementally collect new data, refine the policy using offline RL, validate that the new policy is also safe, and then collect data once more.}
+
+% \side{break into \textbackslash paragraphs}
+% \side{write math definitions}
+% \side{write sample complexity definitions}
+% \begin{itemize}
+%     \item The \emph{online} or \emph{regret} setting.
+
+%     \item The \emph{learn-and-deploy} setting.
+%     \side{Need a better name for learn-and-deploy}
+%     This setting consists of distinct learning and deployment phases. In the learning phase, the agent is not required to perform well and may collect whatever data is most informative. In the deployment phase, the policy is fixed and should be as close to optimal as possible. This setting schematically breaks down into pure data collection followed by pure policy optimization, though in practice policy optimization is an essential tool during exploration.
+%     \item The \emph{offline} or \emph{batch} setting.
+%     This consists only of pure policy optimization given a fixed dataset of environment interactions collected by an extrinsic behavior policy. After learning from this data in whatever way it sees fit, an algorithm produces a fixed policy with the objective of earning as much reward as possible. Though described as a reinforcement learning setting, it does not include any actual reinforcement as the agent never learns from its own interactions with the environment. However, this makes the offline RL setting uniquely valuable for isolating how much can be learned from particular data.
+% \end{itemize}
+
+
+\side{Do I want a section on simulated versus physical envs?}
+% \section{Simulated and Physical Environments}
+
+
+\printendnotes
