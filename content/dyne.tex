@@ -1,0 +1,475 @@
+\section{Introduction}
+
+In recent years, there has been a lot of excitement around end-to-end model-free reinforcement learning for control, both in simulation \citep{lillicrap2015continuous, andrychowicz2018learning, haarnoja2018soft, fujimoto2018addressing} and on real hardware \citep{kalashnikov2018qt, haarnoja2018softapp}.
+In this paradigm, we simultaneously learn intermediate representations and policies by maximizing rewards provided by environment.
+End-to-end learning has one indisputable advantage: since every component of the system is optimized for the end objective, there are no sub-optimal modules that limit best-case performance by losing task-relevant information.
+
+Learning only from the target task is however a double-edged sword.
+When the end objective provides only weak signal for learning, a policy with a poor representation may require many samples to learn a better one.
+By contrast, a policy with a good representation may be able to rapidly fit a simple function of that representation even with weak signal.
+
+
+
+\begin{figure}[h]
+    \centering
+    % \vspace{-10pt}
+    \includegraphics[width=0.4\textwidth]{figures/dyne/env_illustration_1d.pdf}
+    \caption{A 1D environment. The agent (blue dot) can move continuously left and right to reach the goal (gold star).}
+    \label{fig:pixel_illustration}
+    % \vspace{-10pt}
+\end{figure}
+
+Consider the environment shown in \Cref{fig:pixel_illustration}, and two representations of its state: coordinates and pixels.
+As a function of the agent's $x$ coordinate, the value function is simple and smooth.
+The coordinate representation has structure which is useful for learning about the task; namely, points which are close in $L^2$ distance have similar values.
+By contrast, a pixel representation of the agent's state (below, blue) is practically a one-hot vector.
+Two states whose $x$ coordinates differ by one unit have pixels exactly as different as states which differ by 100 units.
+This illustrates the importance of good representations and the potential of representation learning to aid RL.
+
+% In this work, we consider the problem of self-supervised representation learning for reinforcement learning.
+% % Our key insight is that the difference between two states or two actions should be measured by the difference in their effects on the environment.
+% Our contributions are as follows:
+%
+% \begin{enumerate}
+%     % \item We describe a set of goals that representations in RL should aim to achieve, providing a framework for analyzing a representation's strengths and weaknesses.
+%     \item We construct a representation learning objective that captures the structure of the dynamics. This objective, called Dynamics-aware Embedding or DynE, yields embeddings where nearby states and actions have similar outcomes.
+%     \item We show that this single objective greatly simplifies learning from pixels and enables faster exploration through temporally abstract actions.
+% \end{enumerate}
+
+% In this work, we turn this intuition into an objective
+ % consider the problem of self-supervised representation learning for reinforcement learning.
+% We propose to learn embeddings of states and actions such that a pair of states or actions will only be close together if they have similar
+We propose a self-supervised objective for learning embeddings of states and action sequences such that a pair of states or action sequences will be close together if they have similar outcomes.
+% This addresses the difficulty depicted in \Cref{fig:pixel_illustration} by constructing a smooth representation from a difficult one (e.g. pixels).
+% Simultaneously our objective provides a principle for learning a temporally abstract action space for control which is task-independent and generalizes across goals and objects to interact with.
+This objective simultaneously trains a smooth embedding space for states and a temporally abstract action space for control which is task-independent and generalizes across goals and objects.
+
+% which is task-independent and remains valid
+% which we show leads to faster policy learning in environments which require exploration.
+% This abstract action space
+
+We demonstrate the effectiveness of our representation learning objective by training the twin delayed deep deterministic policy gradient algorithm (TD3) \citep{fujimoto2018addressing} with learned action and state spaces.
+With a learned representation of temporally abstract actions, our method exhibits improved sample efficiency compared to state-of-the-art RL methods on control tasks, with larger gains on more complex environments.
+When additionally combined with our learned state representation, our method allows TD3 to scale to pixel observations.
+We demonstrate good performance on a simple family of goal-conditioned 2D control tasks within a few million environment steps without adjusting any TD3 hyperparameters.
+This stands in contrast to end-to-end model-free RL from pixels, which requires extensive tuning \citep{lillicrap2015continuous} and on the order of 100 million environment steps\endnote{Number of steps required to train D4PG taken from \citet{hafner2018learning}, as \citet{barth2018distributed} does not include this information.} \citep{barth2018distributed}.
+
+
+
+
+
+\section{Dynamics-aware embeddings}
+
+\subsection{Notation}
+
+We consider the framework of reinforcement learning in Markov decision processes (MDPs).\endnote{In the interest of space we omit the usual recap of Markov decision processes and reinforcement learning.
+We refer the reader to Section 2 of \citet{silver2014deterministic} for notation and background on MDPs.}
+We denote the state of an environment (e.g.\ joint angles of a robot or pixels) by $s \in \mathcal{S}$, and we assume that the states given by the environment satisfy the Markov property.
+We refer to a sequence of actions $\{ a_1, \ldots, a_k \} \in \mathcal{A}^k$ using the shorthand $\va^k$.
+We use $s' \sim \trans(s, a)$ to refer to the environment's (stochastic) transition function, and overload it to accept sequences of actions: $s_{t+k} \sim \trans(s_t, \va^k_t)$.
+
+
+\subsection{Model and learning objective}
+
+\begin{figure}[t]
+\includegraphics[width=0.7\textwidth]{figures/dyne/model_diagram.pdf}
+\centering
+\caption{Computational architecture for training the DynE encoders $e_a$ and $e_s$. The encoders are trained to minimize the information content of the learned embeddings while still allowing the predictor $f$ to make accurate predictions.}
+\label{fig:model}
+\end{figure}
+
+We propose that a good representation for reinforcement learning should represent states or actions close together if they have similar outcomes (resulting trajectories).
+This allows the agent to generalize from a small number of samples since each sample accurately reflects the value of all the states or actions in its neighborhood.
+In a Markov decision process the outcome of taking an action $a$ in a state $s$ is summarized by the distribution of resulting states $p(s' | s, a) = \trans(s, a)$.
+Therefore we construct a method which embeds states and actions such that nearby embeddings have similar distributions of next states.
+
+
+% be smooth with respect to the optimal value function
+
+% In most practical environments, everything an agent needs to know about a state or an action is captured by its outcome.
+% This suggests that any good representation of a state $s$ and an action sequence $\va^k$ should form the sufficient statistics of the distribution of outcomes $p(s' | s, a)$.
+
+Our method, which we call Dynamics-aware Embedding (DynE), learns encoders $e_s$ and $e_a$ which embed a state and action sequence into latent spaces $z_s \in \mathcal{Z}_s$ and $z_a \in \mathcal{Z}_a$ respectively.
+These encodings are optimized to form a maximally compressed representation of the sufficient statistics of $p(s' | s, \va^k)$ such that $p(s' | s, \va^k) \approx p(s' | z_s, z_a)$.
+% We approximate this objective by maximizing a variational lower bound:
+We approximate this by maximizing the following objective:
+\begin{align}
+\mathcal{L}(\phi_s, \phi_a, \theta) = \E_{s, \va^k, s' \sim \rho^\pi} \Big[ & - \log p(s' | z_s, z_a; \theta)    && \text{predict } s' \label{eq:logprob} \\
+ &+ \beta \KL{e_s(s; \phi_s)}{\mathcal{N}(0, \mI)}      && \text{compress } s  \label{eq:skl} \\
+ &+ \gamma \KL{e_a(\va^k; \phi_a)}{\mathcal{N}(0, \mI)} \Big]       && \text{compress } \va^k  \label{eq:akl}
+\end{align}
+where $z_s \sim e_s(s)$, $z_a \sim e_a(\va^k)$, and $\rho^\pi$ is the distribution of transitions under a behavior policy $\pi$.
+
+The DynE objective is similar to a $\beta$-VAE \citep{higgins2017beta} for $s'$ but with a different variational family; like a $\beta$-VAE, it forms a variational lower bound on $p(s')$ when $\beta = \gamma = 1$.
+Where a variational autoencoder \citep{kingma2013auto,rezende2014stochastic} or $\beta$-VAE chooses the variational family to be $\mathcal{Q} = \{q(z | s')\}$, we use a factored latent space $\{ z_s, z_a \}$ and independent posterior approximations given the previous state and the action: $\mathcal{Q} = \{ (q(z_s | s), q(z_a | \va^k)) \}$.
+This factorization yields separate encoders for states and actions where the state encoder's output is valid for any action and vice versa.
+% Like a $\beta$-VAE, when
+
+% Two encoded states $s$ and $\tilde{s}$ should therefore only be close together if the outcome distributions $\trans(s, a)$ and $\trans(\tilde{s}, a)$ are similar for any $a$.
+
+The DynE objective can also be interpreted in the information bottleneck (IB) framework \citep{tishby2000information}.
+In the IB framework term \labelcref{eq:logprob} is the prediction objective and terms \labelcref{eq:skl,eq:akl} regularize the latent representation to remove all extraneous information.
+Our construction is nearly identical to the approximate information bottleneck proposed by \citet{alemi2016deep}, with the main difference being the factorization of the representation into separate state and action components.
+
+In our experiments we use an isotropic Normal distribution for $p(s' | z_s, z_a; \theta)$ such that term \labelcref{eq:logprob} reduces to $\norm{f(z_s, z_a; \theta) - s'}_2^2$ where $f$ computes the mean.
+% This can be interpreted as learning a generative model for $s'$: $z_s, z_a \sim \mathcal{N}(0, \mI)$, $s' \sim \mathcal{N}(f(z_s, z_a), \sigma^2)$ with a fixed $\sigma^2$.
+We use diagonal-covariance Normal distributions for $e_s$ and $e_a$ such that $\{\mu_s, \sigma_s^2\} = e_s(s)$, $\{\mu_a, \sigma_a^2\} = e_a(\va^k)$, $z_s \sim \mathcal{N}(\mu_s, \sigma_s^2)$, and $z_a \sim \mathcal{N}(\mu_a, \sigma_a^2)$.
+The behavior policy we use for data collection is $\pi = Unif(\mathcal{A})$.
+
+
+
+\section{Using learned embeddings for reinforcement learning}
+
+\subsection{Decoding to raw actions}
+
+In order to be useful for RL, the abstract action space produced by the encoder must be decodeable to raw actions in the environment.
+Since the mapping from action sequences to high-level actions is many-to-one, inverting it is nontrivial.
+We simplify this ill-posed problem by defining an objective with a single optimum.
+
+Once the action encoder $e_a$ is fully trained, we hold it fixed and train an action decoder $d_a$ to minimize
+
+\begin{align}
+\mathcal{L}(d_a) = \E_{z_a \sim \mathcal{N}(0, \mI)} \Big[ || e_a(d_a(z_a)) - z_a ||_2^2 + \lambda || d_a(z_a) ||_2^2 \Big] \label{eq:decoder}
+\end{align}
+
+The first term of this objective ensures that the action decoder $d$ is a one-sided inverse of $e_a$; that is, $e_a(d_a(z_a)) = z_a$ but $d_a(e_a(a_1, \ldots, a_k)) \ne a_1, \ldots, a_k$.
+The second term of the loss ensures that $d_a$ is in particular the minimum-norm one-sided inverse of $e_a$ and gives the objective for the output of $d_a$ a single minimum.
+% Intuitively, there may be many sequences of actions which (nearly) always have identical results in terms of $\trans(s, \va^k) ~ \forall s$; \Cref{eq:decoder} selects the one which is smoothest and consumes the least energy.
+% The minimum-norm inverse, i.e. the inverse which produces the actions with the smallest norm, is desireable as it leads to actions which are smooth and consume less energy.
+Out of all the action sequences which have the same outcome, the minimum-norm sequence is desireable as it leads to trajectories which are smooth and consume less energy.
+We choose $\lambda$ to be small (e.g. $10^{-2}$) to ensure that the reconstruction criterion dominates the optimization.
+
+
+% \red{maybe delete this paragraph, or at least tighten it up}
+
+% This action decoder takes only an embedded action as its input, not a state.
+% As a result, if there are multiple environments that share similar dynamics, we can use the same decoder even when the task or the state representations may be different.
+% The dynamics must be similar in the sense that the same sets of actions map to similar outcomes across all the environments.
+% A sequence of actions does not need to have the \emph{same} outcome in environment A as it does in environment B, but if $\va^k_1$ and $\va^k_2$ are equivalent in environment A they should be equivalent in environment B.
+% We show in \Cref{fig:lowd_results} that an action decoder trained on one environment generalizes extremely well to related environments.
+
+
+\subsection{Efficient RL with temporal abstraction}
+
+Once equipped with a decoder which maps from high-level actions to sequences of raw actions, we train a high-level policy that solves a task by selecting high-level actions.
+In this section we extend the deterministic policy gradient \citep{silver2014deterministic} family of algorithms to work with temporally-extended actions while maintaining off-policy updates and learning from every environment step.
+This allows our method to achieve superior sample efficiency when working with high-level actions.
+In particular, we extend the twin delayed deep deterministic policy gradient (TD3) algorithm \citep{fujimoto2018addressing} to work with the DynE representation of actions to form an algorithm we call DynE-TD3.
+
+We first describe why DPG requires modifications to accommodate temporally-abstracted actions. One simple approach to combining DynE with DPG would be to incorporate the $k$-step DynE action space into the environment to form a new MDP.
+This MDP allows the use of DPG without modification; however, it only emits observations once every $k$ timesteps.
+As a result, after $N$ steps in the original environment, the deterministic policy $\mu$ and critic function $Q$ can only be trained on $N/k$ observations.
+This has a substantial impact on sample efficiency when measured in the original environment.
+
+Instead we require an algorithm which can perform updates to the policy $\mu$ and critic $Q$ for every environment step.
+To do this, we train both $\mu$ and $Q$ in the abstract action space with minor changes to their updates.
+We distinguish these functions which use DynE actions from their raw equivalents by adding a superscript $\text{DynE}$, i.e. $\mu^{\text{DynE}}$ and $Q^{\text{DynE}}$.
+We augment the critic function with an additional input, $i$, which represents the number of steps $0 \le i < k$ of the current embedded action $z$ that have already been executed.
+This forms the DynE-TD3 critic:
+
+\begin{align}
+\label{eq:critic}
+Q^{\text{DynE}}(e_s(s_t), z_t, i) = \sum_{j=0}^{k-i-1} \big( \gamma^j r_{t+j} \big) + \gamma^{k-i} Q^{\text{DynE}} \Big( e_s(s_{t+k-i}), \mu^{\text{DynE}}(e_s(s_{t+k-i})), 0 \Big)
+\end{align}
+
+In plain language, the value of being on step $i$ of abstract action $e_t$ is the value of finishing the remaining $(k-i)$ steps of $z_t$ and then continuing on following the policy.
+This is similar to the idea of $k$-step returns \citep{sutton2018reinforcement}, but with a variable $k$ which depends on the step within the current plan.
+Whereas $k$-step returns would typically require an off-policy correction such as Retrace \citep{munos2016safe}, conditioning on $z_t$ and $i$ determines all $k-i$ actions in the return.
+In effect, they remain a single action, making the update valid off policy.
+The DynE critic is trained by minimizing the Bellman error implied by \cref{eq:critic}.
+
+To update the policy we follow the standard DPG technique of using the gradient of the critic.
+We modify the algorithm to take into account that $i=0$ at the time of issuing a new high-level action.
+The gradient of the return with respect to the policy parameters is then
+
+\begin{align}
+\nabla_\theta J_\pi(\mu^{\text{DynE}}_\theta) \approx \E_{s \sim \rho^\pi} \Big[ \nabla_\theta \mu^{\text{DynE}}_\theta(e_s(s)) ~ \nabla_z Q^{\text{DynE}}(e_s(s), z, 0)|_{z=\mu^{\text{DynE}}_\theta(e_s(s))} \Big]
+\end{align}
+
+given that data was collected according to a behavior policy $\pi$.
+
+
+\section{Related work}
+Successor representations, an inspiration for this work, represent a state by the expected rate of future visits to other states \citep{dayan1993improving,kulkarni2016deep,barreto2017successor}.
+Successor representations have been demonstrated to be an effective model of animal and human learning \citep{momennejad2017successor,stachenfeld2017hippocampus}.
+They are also one of the earliest realizations of the idea of representing each state by its future.
+Whereas successor representations learn future occupancy maps for a particular policy, we learn an embedding space where states are close together if they have similar outcomes for any policy.
+
+Several papers have proposed using (variational) auto-encoders to learn embeddings for observations \citep{lange2010deep,van2016stable,higgins2017darla,caselles2018continual}; unlike our work, these models operate on a single observation at a time and do not depend on the environment dynamics.
+Forward prediction has also been used as an auxiliary task to speed RL training \citep{jaderberg2016reinforcement}, and \citet{Jonschkowski2017PVEsPE} learn representations which adhere to physical constraints.
+\citet{ghosh2018learning} propose to learn state embeddings using the action distribution of a goal-conditioned policy; however, their technique depends on already having a successful policy.
+Other work has proposed to use mutual information maximization to learn embeddings which facilitate exploration via intrinsic motivation \citep{kim2018emi}.
+
+% Another line of work couples the process of learning a model of the environment with training a policy on imagined rollouts \citep{sutton1991dyna,deisenroth2011pilco,ha2018world,clavera2018model,kaiser2019model,henaff2019model}.These works are similar to ours in that they learn forward models of the environment and use them to speed the training of model-free policies.
+% However, our work differs from theirs in that we use forward modeling only as a surrogate objective for representation learning.
+
+Similarly to this work, hierarchical reinforcement learning seeks to learn temporal abstractions.
+These abstractions are variously defined as skills \citep{florensa2017stochastic, hausman2018learning}, options \citep{sutton1999between, bacon2017option}, or goal-directed sub-policies \citep{kulkarni2016hierarchical, vezhnevets2017feudal}.
+% Whereas these works train a low-level policy by maximizing the reward of the overall task or a heuristically-defined subtask, in this work we seek to learn a representation of the transition structure of the environment which can be used for any downstream task.
+Most closely related are SeCTAR \citep{CoReyes2018SelfConsistentTA} and HIRO \citep{Nachum2018NearOptimalRL}.
+SeCTAR simultaneously learns a generative model of future states and a low-level policy which can reach those states.
+% Unlike this work, their latent space represents a particular trajectory through the environment rather than an outcome, making it state-dependent.
+% Furthermore, SeCTAR assumes the reward function is given ahead of time.
+HIRO learns a representation of goals such that a high-level policy can induce any action in a low-level policy.
+% However, their off-policy performance depends on an approximate re-labeling of action sequences to train the high-level policy.
+Unlike this work, both SeCTAR and HIRO learn state-dependent low-level policies, not action representations.
+Furthermore SeCTAR assumes the reward function is given ahead of time, and HIRO's off-policy performance depends on an approximate re-labeling of action sequences to train the high-level policy.
+% A follow-up paper \citep{Nachum2018NearOptimalRL} learns a representation for goal states such that a high-level policy can induce any action in a low-level policy.
+
+Also related are methods which attempt to learn embeddings of single actions to enable efficient learning in very large action spaces \citep{dulac2015deep, chandak2019learning}.
+In particular, \citet{chandak2019learning} learns a latent space of actions based on the effects of an action on the environment. However, their latent spaces are for a single action and they do not consider learned state representations.
+Another related direction is learning embeddings of one or more actions from demonstrations \citep{tennenholtz2019natural}; this embedded action space builds in prior knowledge from the demonstrator and can allow faster learning.
+
+
+
+\section{Representation Experiments}
+
+% In this section we empirically investigate the properties of the learned DynE representations and their relationship with the environment dynamics.
+% We first visualize the relationship between DynE actions and their effects in the environment, then show how this tight coupling between actions and multi-step outcomes can improve exploration.
+In this section we empirically investigate how the learned DynE representations reshape the problem of reinforcement learning.
+First we make a connection between temporal abstraction and exploration, revealing that DynE actions result in better state coverage.
+Then we probe the relationship between DynE state embeddings and the task value function.
+% \red{change if I use a state plot}
+
+
+% \subsection{Visualizing the DynE action space}
+% \label{sec:latent-vis}
+
+% \red{replace this figure with one about states or clean it up}
+
+% To better understand the structure in the DynE action embedding space, we visualize the relationship between the outcome of a sequence of actions and the DynE embedding of those actions.
+% In particular, when embedding an action sequence, the DynE objective seeks to preserve information about the outcome of that action sequence (i.e. the change in state), but minimize information about the original action sequence.
+% Therefore we should see that all action sequences which have similar outcomes embed close together, regardless of the actions along the way.
+% We investigate this by plotting the 2D DynE embedding of 10K action sequences and coloring them by their outcome under the environment dynamics.
+% If the DynE embedding depends on the actions within the sequence and not just the outcome, some sequences with similar outcomes (colors) will be embedded far apart.
+% \Cref{fig:spaces} shows the result of this experiment in a simple Point environment with an easy-to-visualize 2D $(x, y)$ state.
+% For this simple problem, we see that all pairs of action sequences $\va^k_1$ and $\va^k_2$ with similar outcomes are close together in the embedding space.
+% % The correspondence between the two spaces appears to remain strong for high-dimensional and nonlinear environments, but is much harder to render in two dimensions.
+
+% \begin{figure}[h]
+% \centering
+% \begin{subfigure}[t]{0.35\textwidth}
+%     \includegraphics[width=\textwidth]{figures/dyne/state_space_rainbow.png}
+%     \caption{Outcome space}
+% \end{subfigure}
+% \begin{subfigure}[t]{0.35\textwidth}
+%     \includegraphics[width=\textwidth]{figures/dyne/latent_space_rainbow.png}
+%     \caption{DynE action space}
+% \end{subfigure}
+% \caption{The mapping between the outcomes and embeddings of action sequences.
+% We sample 10K random sequences of four actions and evaluate their outcomes in the environment dynamics, measured by $(\Delta x, \Delta y) = s_{t+4} - s_t$.
+% \textbf{(a)} We plot the outcome $(\Delta x, \Delta y)$ of each action sequence and color each point according to its location in the plot.
+% \textbf{(b)} We use DynE to embed each action sequence into two dimensions; each point in this plot corresponds to a point in (a) and takes its color from that corresponding point.
+% The similarity of the two plots and the smooth color gradient in (b) indicate that DynE is embedding action sequences according to their outcomes.
+% }
+% \label{fig:spaces}
+% \end{figure}
+
+\subsection{Temporal abstraction and exploration}
+
+
+% \red{rewrite to explain why temporal abstraction helps exploration}
+
+
+When embedding an action sequence, the DynE objective seeks to preserve information about the outcome of that action sequence (i.e. the change in state), but minimize information about the original action sequence.
+% Therefore we expect all action sequences which have similar outcomes to embed close together, regardless of the actions along the way.
+% Appendix \ref{sec:latent-vis} empirically verifies this property in a simple environment.
+As shown in Appendix \ref{sec:latent-vis}, this leads to a representation where all action sequences which have similar outcomes embed close together.
+% This has benefits for exploration.
+% Uniformly selecting a raw action at every timestep leads to over-sampling the area around the starting position.
+% If uniformly selecting an abstract DynE action of length $k$ results in reaching a state uniformly sampled from the $k$-step ball around the starting point,
+We propose that this temporally abstract action space, where actions correspond to multi-step outcomes, allows random actions to explore the environment more efficiently.
+
+We empirically validate the exploration benefits of the temporally abstract DynE actions.
+\Cref{fig:exploration_histogram} shows that uniformly sampling a DynE action results in a nearly uniform distribution over the states reachable within $k$ steps.
+Over the course of an entire episode, selecting DynE actions uniformly at random reaches faraway states more often than random exploration with raw actions.
+% We also provide a visualization of the learned DynE action space in Appendix \ref{sec:latent-vis}
+Appendix \ref{sec:exploration_trajs} shows the qualitative difference between random trajectories in the raw and DynE action spaces, and Appendix \ref{sec:varying_k} studies the impact of varying $k$ on the performance of a learned policy.
+
+\begin{figure}[h]
+\centering
+    \includegraphics[width=0.7\textwidth]{figures/dyne/exploration_histograms_ratio_sidelegend.pdf}
+\caption{The distribution of state distances reached by uniform random exploration using DynE actions ($k=4$) or raw actions in Reacher Vertical. \textbf{Left:} Randomly selecting a 4-step DynE action reaches a state uniformly sampled from those reachable in 4 environment timesteps. \textbf{Right:} Over the length of an episode (100 steps), random exploration with DynE actions reaches faraway states very much more often than exploration with raw actions. The visit ratio shows how frequently DynE exploration reaches a certain distance compared to raw exploration.}
+\label{fig:exploration_histogram}
+\end{figure}
+
+\subsection{State representations}
+
+The DynE objective compresses states while preserving information about the outcome of taking any action in that state.
+If this compression is successful, states which have similar outcomes will be close together in embedding space.
+In an MDP, two states which have identical successor states have values which differ by at most the range of the reward function $r_{\max} - r_{\min}$.
+While in general states which lead to merely similar successors may have arbitrarily different value, we suggest that in many tasks of interest, similar successors may entail similar value.
+
+We investigate whether the DynE state embedding leads to neighborhoods with similar value in the Reacher Vertical environment.
+We collect 10K states from a random policy in the environment and perform dimensionality reduction on three representations of those states: the DynE embedding of state images, low-dimensional joint states, and pixels.
+\Cref{fig:state_tsne} shows the results of this dimensionality reduction, in which every point is colored by its value under a fully-trained TD3 policy on the low-d states.
+DynE embeddings have neighborhoods with more similar values than states or pixels.
+
+\begin{figure}[h]
+\vspace{-0.5em}
+\centering
+    \includegraphics[width=0.99\textwidth]{figures/dyne/state_tsne.png}
+\caption{The relationship between state representations and task value. Each plot shows the t-SNE dimensionality reduction of a state representation, where each point is colored by its value under a near-optimal policy.
+(a) The DynE embedding from pixels places states with similar values close together.
+(b) The low-dimensional states, which consist of joint angles, relative positions, and velocities, have some neighborhoods of similar value, but also many regions of mixed value.
+(c) The relationship between the pixel representation and the task value is very complex.
+% (b) and (c) The low-dimensional states, which consist of angles and velocities, have some neighborhoods of similar value, but also many isolated points.
+% (c) The relationship between the pixel representation and the task value is very complex.
+}
+\label{fig:state_tsne}
+\end{figure}
+
+% We provide a similar investigation of the relationship between DynE's action embeddings and their outcomes in the environment in Appendix \ref{sec:latent-vis}, which shows that DynE actions have a one-to-one correspondence with outcome states.
+
+\section{Reinforcement learning experiments}
+%  and their effectiveness for deep RL
+In this section we assess the effectiveness of the DynE representations for deep RL, individually analyzing the contributions of the action and state representations before combining them.
+% we separately analyze the contributions of the learned action and state representations.
+First we evaluate the DynE action space on a set of six tasks with low-dimensional state observations, testing its usefulness across a set of tasks and object interactions.
+% including transferring the learned action space between environments with similar dynamics but different tasks and objects.
+Then, we test the DynE state space on a set of three tasks with pixel observations.
+Finally, we combine DynE actions with DynE observations, verifying that the two learned representations are complementary.
+
+Appendix \ref{sec:hyperparams} provides a full description of hyperparameters and model architectures, and all of the code for DynE is available on GitHub at \url{https://github.com/dyne-submission/dynamics-aware-embeddings}.
+
+\paragraph{Environments}
+
+We use six continuous control tasks from two families implemented in the MuJoCo simulator \citep{todorov2012mujoco} to evaluate our method.
+Within each family, the task and observation space change but the robot being controlled stays roughly the same, allowing us to test the transferrability of the DynE action space between tasks.
+The Reacher family consists of three of tasks which involve controlling a 2D, 2DoF arm to interact with various objects.
+The 7DoF family of tasks from OpenAI Gym \citep{brockman2016openai} is quite difficult, featuring three tasks in which a 3D, 7DoF arm must use different end effectors to push or throw various objects to randomly-generated goal positions.
+Images and detailed descriptions of both families of tasks are available in Appendix \ref{sec:task-renders}.
+
+
+\subsection{Low-dimensional states}
+\label{sec:action_experiments}
+
+
+% We use both families of tasks to evaluate the performance of the DynE action space and its generality across tasks.
+% Whereas directly transferring a policy to an environment with different objects and observations would be impossible, DynE actions .
+
+For training the DynE action representation we use 100K steps with a uniformly random behavior policy in the simplest environment in each family with no reward or other supervisory signal.
+As this DynE pretraining is unsupervised and only occurs once for each family of environments, the $x$ axis on these training curves refers only to the samples used to train the policy.\endnote{On all environments except the simplest (Reacher Vertical) shifting the DynE-TD3 plot by 100K steps does not affect the ordering of the results.}
+We then transfer this action representation to all three environments in the family.
+When training DynE-TD3 we use all of the default hyperparameters from the TD3 implementation across all environments.
+
+We directly test the impact of switching from raw to DynE actions by comparing TD3 to DynE-TD3.
+For completeness we compare with two additional state-of-the-art model-free methods: soft actor-critic (SAC) \citep{haarnoja2018soft,haarnoja2018softapp} and proximal policy optimization (PPO) \citep{schulman2017proximal}.
+We also compare with soft actor-critic with latent space policies (SAC-LSP) \citep{haarnoja2018latent}, an innovative hierarchical method which transforms a low-level action space into an abstract one by training an invertible low-level policy.
+In all cases we use the official implementations\endnote{TD3: \url{https://github.com/sfujim/TD3/}}\endnote{SAC and SAC-LSP: \url{https://github.com/haarnoja/sac}}\endnote{PPO: \url{https://github.com/openai/baselines/tree/master/baselines/ppo2}}
+and the MuJoCo hyperparameters used by the authors.
+We also attempted to compare with the hierarchical method by \citet{Nachum2018NearOptimalRL}, but after several emails with the authors and dozens of experiments we were unable to get it to converge on tasks other than those in their paper.
+
+\paragraph{Results}
+\Cref{fig:lowd_results} shows the results of these experiments.
+Most significantly, they show that switching from the raw action space (TD3 curve) to the DynE action space results in faster training and allows TD3 to solve the difficult 7DoF suite of tasks.
+We see that the DynE action space generalizes across several tasks with the same robot, even when interacting with objects unseen during training.
+% They show that (1) high-quality policies can be trained on the DynE action space; (2) TD3 shows substantial efficiency gain from using the DynE action space; and (3) the DynE space generalizes across several tasks with the same robot, even when interacting with objects unseen during training.
+It is especially worth noting that the gains from DynE increase as the tasks become harder, maintaining convergence, stability, and low variance in the face of high-dimensional control with difficult exploration.
+Since SAC-LSP \citep{haarnoja2018latent} performs similarly but worse than SAC we test it only on the simpler Reacher family of tasks; meanwhile, the PPO curves do not enter the frame on the Reacher family of tasks due to its poor sample efficiency.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.9\textwidth]{figures/dyne/states_results_lsp_smalltitle.pdf}
+\caption{Performance of DynE-TD3 and baselines on two families of environments with low-dimensional observations.
+Dark lines are mean reward over 8 seeds and shaded areas are bootstrapped 95\% confidence intervals.
+Across all the environments, TD3 learns faster with the DynE action space than with the raw actions.
+Within each family of environments, the DynE action space was trained only on the simplest task (left).}
+\label{fig:lowd_results}
+\end{figure}
+
+\subsection{Pixels}
+
+% \red{talk about DARLA and why it's a good comparison}
+
+Using the Reacher family of environments we evaluate several state representations by their effectiveness for policy learning with TD3.
+% To train the DynE state space we use 100K steps from a uniformly random policy in each environment; since the DynE state representation must be trained on each environment, we include those 100K steps in the $x$ axis of our training curves.
+
+We evaluate two established methods for learning representations from single images.
+``DARLA'' is the Disentangled Representation Learning Agent proposed by \citet{higgins2017darla} with the denoising autoencoder loss, which is referred to in that work as $\beta$-VAE$_{DAE}$.
+``VAE'' is a standard variational autoencoder \citep{kingma2013auto,rezende2014stochastic}, which has previously been found to learn effective representations for control \citep{van2016stable}; it is equivalent to DARLA with the pixel-space loss and $\beta=1$.
+% To enable direct comparison we train both state representation baselines on the same dataset we use for DynE, then use their encoding as the state space for TD3.
+Since these representations operate on a single frame at a time, we apply them to the most recent four frames independently and then concatenate the embeddings before feeding them to the policy.
+These representations have compressed latent spaces, but they encode no knowledge of the environment's dynamics, allowing us to evaluate the importance of incorporating the dynamics into our embeddings.
+
+Next we evaluate representation learning methods whose objectives incorporate the dynamics.
+``S-DynE,'' for State DynE, is the DynE state embedding $e_s$, and ``SA-DynE'' combines the DynE state and action representations.
+``S-Deterministic'' and ``SA-Deterministic'' are ablations of the corresponding DynE methods which have the same forward-prediction objective but no KL or noise on the latent representations.
+Comparing the DynE methods to their respective ablations reveals the contribution of explicitly introducing a compression objective to the latent space.
+
+% Finally, we evaluate whether using a learned action space in combination with the learned state space yields additional gains.
+% We label the policies trained with both state and action DynE representations ``SA-DynE''.
+% ``SA-Deterministic'' is an ablation of SA-DynE with no KL or noise in either the state or action latent spaces.
+For training all of the learned representations we use a dataset of 100K steps in each environment from a uniformly random policy.
+In every case we train TD3 with the learned representations using all of the default hyperparameters from the official TD3 implementation.
+
+% Next we evaluate two state representation learning methods whose objectives incorporate the dynamics.
+% ``S-DynE,'' for State DynE, is the DynE state embedding $e_s$.
+% ``S-Deterministic'' is an ablation of S-DynE which has the same forward-prediction objective but with no KL or noise on the latent representation.
+% Comparing these two reveals the contribution of explicitly introducing a compression objective to the latent space.
+
+% Finally, we evaluate whether using a learned action space in combination with the learned state space yields additional gains.
+% We label the policies trained with both state and action DynE representations ``SA-DynE''.
+% ``SA-Deterministic'' is an ablation of SA-DynE with no KL or noise in either the state or action latent spaces.
+% For training all of the learned representations we use a dataset of 100K steps in each environment from a uniformly random policy.
+% In every case we train TD3 with the learned representations using all of the default hyperparameters from the official TD3 implementation.
+
+
+We compare these representation learning methods with TD3 trained from pixels.
+As there are no experiments on pixels in the TD3 paper, we performed extensive search over network architectures and hyperparameters.
+We included in our search the configurations used in the pixel experiments of DDPG \citep{lillicrap2015continuous} as well as those used in successful discrete-action RL works from pixels \citep{schulman2017proximal,pytorchrl,espeholt2018impala}.
+% For the experiments shown here, we use a simple linear control problem to evalute which combination of architecture and hyperparameters works best, then use those settings throughout.
+
+
+% For both methods we train the state representation on the same dataset we use for DynE and
+% As this encoder operates on a single image at a time, we mirror the stacked-image input to the other models by concatenating the encoding of the current frame with the encodings of the three most recent frames.
+
+% Finally, we evaluate whether DynE actions yield additional improvement when combined with DynE states.
+% We use the state encoder $e_s$ and the action decoder $d$ from the same DynE model we use for the S-DynE-TD3 results.
+% We call the policies trained with both state and action DynE representations SA-DynE-TD3.
+
+% \red{add deterministic model}
+
+% \red{rewrite discussion of baselines: deterministic has dynamics but weaker structure, DARLA \& VAE have good structure but no dynamics}
+
+% \red{explain that all the results on pixels use TD3}
+
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.95\textwidth]{figures/dyne/pixels_results_sdet.png}
+\caption{Performance of TD3 trained with various representations.
+Learned representations for state which incorporate the dynamics make a dramatic difference.
+SA-DynE converges stably and rapidly and achieves performance from pixels that nearly equals TD3's performance from states.
+Dark lines are mean reward over 8 seeds and shaded areas are bootstrapped 95\% confidence intervals.}
+\label{fig:pixel_results}
+\end{figure}
+
+\paragraph{Results}
+Figure~\ref{fig:pixel_results} shows the results of these experiments.
+We find that the single-image methods are unable to solve any of the three tasks from pixels; TD3 from pixels diverges in all cases, while VAE and DARLA learn gradually at best.
+If simply reducing the dimension of the states were sufficient to enable effective policy training, we would expect good performance from these methods.
+S-DynE and S-Deterministic, which incorporate the dynamics into their representation learning objectives, perform far better.
+The minimality imposed by the DynE objective allows S-DynE and SA-Dyne to outperform their deterministic ablations.
+% Instead we find that S-DynE-TD3 trains with many fewer samples and reaches higher performance than VAE-TD3, demonstrating that the particular structure learned by DynE plays a crucial role in learning.
+% S-DynE-TD3 is able to achieve decent performance on the two simpler environments, establishing a lower bound on the fidelity of the DynE state representation.
+SA-DynE learns rapidly and reliably, finding behaviors which qualitatively solve all three tasks.
+The improvement of SA-DynE over S-DynE shows that the state and action representations are complementary.
+
+% Furthermore, training a policy from pixels using SA-DynE-TD3 has dramatically better sample complexity than training PPO from low-dimensional states across all three environments and equals SAC from low-d states on \texttt{ReacherTurn}.
+% For a comparison of these methods across different observation spaces see Appendix \labelcref{sec:extended_results}.
+% These results show that the DynE action and state representations are effective at scaling model-free RL to environments with high-dimensional states and difficult exploration.
+
+
+
+
+\section{Discussion}
+
+In this work we proposed a method, Dynamics-aware Embedding (DynE), that jointly learns embedded representations of states and actions for reinforcement learning.
+% We described how DynE embeddings exhibits the properties of fidelity, structure, and reach and how they affect policy learning.
+Our experiments reveal that DynE action embeddings lead to more efficient exploration, resulting in more sample efficient learning on complex tasks, while DynE state embeddings allow unmodified model-free RL algorithms to scale to pixel observations.
+When combined, the DynE state and action embeddings result in stable, sample-efficient learning of high-quality policies from pixels.
+
+\side{add appendices}
+
+\printendnotes

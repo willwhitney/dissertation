@@ -57,11 +57,14 @@ An algorithm $A_1$ would dominate $A_2$ if $\forall i$, $V^{A_1(\mdp, i)}(s_0) \
 
 
 
-\section{Settings with Regret and Deployment} \label{sec:regret-deployment}
+\section{Online and Deployment Settings} \label{sec:regret-deployment}
 
 While the overall MDP framework is largely shared in the community, several different objectives for a learning agent are commonly studied.
+The online and offline settings are perhaps the most studied in the theory community, but the "learn-and-deploy" setting has the most relevance for present applications of RL.
+
 
 \paragraph{The online setting.}
+\side{talk about sample complexity}
 Here an RL agent learns by continually interacting with the environment with the goal of maximizing the total reward earned across all time.
 This gives rise to the explore-exploit tradeoff when acting: at each moment, the agent may choose to take an action which is uninformative but leads to greater short-term reward, or one which will yield more information at the cost of lower reward.
 The objective for this setting is to minimize the rate of accumulation of \emph{regret}, which measures the difference between the total reward obtained by an optimal policy and the agent:
@@ -72,6 +75,7 @@ This setting is appropriate when an agent is being trained "on the job," where m
 
 
 \paragraph{The learn-and-deploy setting.}
+\side{talk about sample complexity}
 This setting consists of distinct learning and deployment phases.
 In the learning phase, the agent is not required to perform well and may collect whatever data is most informative.
 In the deployment phase, the policy is fixed and should be as close to optimal as possible.
@@ -90,6 +94,7 @@ Comparisons of final, large-data performance similarly reflect this setting \cit
 
 
 \paragraph{The offline setting.}
+\side{talk about sample complexity}
 Also known as the \emph{batch} setting, this consists only of pure policy optimization given a fixed dataset of environment interactions collected by an extrinsic behavior policy.
 After learning from this data in whatever way it sees fit, an algorithm produces a fixed policy with the objective of earning as much reward as possible.
 Though described as a reinforcement learning setting, it does not include any actual reinforcement as the agent never learns from its own interactions with the environment.

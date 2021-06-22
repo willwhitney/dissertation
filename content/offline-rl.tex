@@ -1,0 +1,560 @@
+% \newcommand{\R}{\mathbb{R}}
+\newcommand{\V}{\mathbb{V}}
+% \newcommand{\E}{\mathop{\mathbb{E}}}
+\newcommand{\Prob}{\mathbb{P}}
+
+
+
+\section{Introduction}
+
+% \begin{itemize}
+%     \item Offline RL/ prior work
+
+%     \item Summary of benchmark results (guidance)
+
+%     \item What is holding multi-step back? evaluation error caused by distribution shift and iterative error exploitation
+
+%     \item When can multi-step be more effective? Very broad coverage to estimate bad states. When behavior is good, one-step more effective.
+
+%     \item Summarize contributions
+% \end{itemize}
+
+An important step towards effective real-world RL is to improve sample efficiency. One avenue towards this goal is offline RL (also known as batch RL) where we attempt to learn a new policy from data collected by some other behavior policy without interacting with the environment. Recent work in offline RL is well summarized by \citet{levine2020offline}.
+
+In this paper, we challenge the dominant paradigm in the deep offline RL literature that primarily relies on actor-critic style algorithms that alternate between policy evaluation and policy improvement \citep{fujimoto2018off, fujimoto2019benchmarking, peng2019advantage, kumar2019stabilizing, kumar2020conservative, wang2020critic, wu2019behavior, kostrikov2021offline, jaques2019way, Siegel2020Keep, nachum2019algaedice}. All these algorithms rely heavily on off-policy evaluation to learn the critic. Instead, we find that a simple baseline which only performs one step of policy improvement using the behavior Q function often outperforms the more complicated iterative algorithms.
+Explicitly, we find that our one-step algorithm beats prior results of iterative algorithms on most of the gym-mujoco \citep{brockman2016gym} and Adroit \citep{rajeswaran2017learning} tasks in the the D4RL benchmark suite \citep{fu2020d4rl}.
+
+We then dive deeper to understand why such a simple baseline is effective. First, we examine what goes wrong for the iterative algorithms. When these algorithms struggle, it is often due to poor off-policy evaluation leading to inaccurate Q values. We attribute this to two causes: (1) distribution shift between the behavior policy and the policy to be evaluated, and (2) iterative error exploitation whereby policy optimization introduces bias and dynamic programming propagates this bias across the state space.
+We show that empirically both issues exist in the benchmark tasks and that one way to avoid these issues is to simply avoid off-policy evaluation entirely.
+
+
+
+
+Finally, we recognize that while the the one-step algorithm is a strong baseline, it is not always the best choice. In the final section we provide some guidance about when iterative algorithms can perform better than the simple one-step baseline. Namely, when the dataset is large and behavior policy has good coverage of the state-action space, then off-policy evaluation can succeed and iterative algorithms can be effective.
+In contrast, if the behavior policy is already fairly good, but as a result does not have full coverage, then one-step algorithms are often preferable.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.6\textwidth]{figures/offline-rl/cartoon.png}
+    \vspace{-0.2cm}
+    \caption{A cartoon illustration of the difference between one-step and multi-step methods. All algorithms constrain themselves to a neighborhood of ``safe'' policies around $ \beta$. A one-step approach (left) only uses the \textcolor{blue}{on-policy} $ \widehat Q^\beta$, while a multi-step approach (right) repeatedly uses \textcolor{red}{off-policy} $\widehat Q^{\pi_i}$.
+    % \joan{This is a nice illustration. I was wondering to what extent we could illustrate this neighborhood as a landscape (given by the objective function $J$) and show the two cartoon scenarios: (i) very smooth landscape, in which multi-step approaches would be worse off due to errors in estimating the gradient ($Q$), (ii) rugged landscape / valley, so that $\beta$ is in a basin that needs a non-linear path to keep descending. Also, we can illustrate what happens in off-policy updates, as the red arrows start drifting away from the true ones (not accessible)}
+    }
+    \label{fig:cartoon}
+\end{figure}
+
+Our main contributions are:
+\begin{itemize}[leftmargin=*]
+    \item A demonstration that a simple baseline of one step of policy improvement outperforms more complicated iterative algorithms on a broad set of offline RL problems.
+    \item An examination of failure modes of off-policy evaluation in iterative offline RL algorithms.
+    \item A description of when one-step algorithms are likely to outperform iterative approaches.
+\end{itemize}
+
+
+
+\vspace{0.2cm}
+\section{Setting and notation}
+
+We will consider an offline RL setup as follows. Let $ \mathcal{M} = \{\mathcal{S}, \mathcal{A}, \rho, P, R, \gamma \}$ be a discounted infinite-horizon  MDP.
+In this work we focus on applications in continuous control, so we will generally assume that both $ \mathcal{S}$ and $ \mathcal{A}$ are continuous and bounded.
+We consider the offline setting where rather than interacting with $\mathcal{M}$, we only have access to a dataset $ D_N$ of $ N $ tuples of $ (s_i, a_i, r_i)$ collected by some behavior policy $ \beta$ with initial state distribution $ \rho$.
+Let $ r(s,a) = \E_{r|s,a}[r]$ be the expected reward.
+Define the state-action value function for any policy $ \pi$ by $ Q^\pi(s,a) := \E_{P, \pi | s_0 = s,\ a_0 = a}[\sum_{t=0}^\infty \gamma^t r(s_t, a_t)]$.
+The objective is to maximize the expected return $ J $ of the learned policy:
+\begin{align}
+    J(\pi) := \E_{\rho, P, \pi}\left[ \sum_{t=0}^\infty \gamma^t r(s_t, a_t) \right] = \E_{\substack{s\sim \rho\\ a \sim \pi|s}}[Q^\pi(s,a)]. % \frac{1}{1-\gamma} \E_{s\sim d^\pi_\rho} \E_{a\sim \pi|s}[r(s,a)]
+\end{align}
+Following \citet{fu2020d4rl} and others in this line of work, we allow access to the environment to tune a small (< 10) set of hyperparameters.
+See \citet{paine2020hyperparameter} for a discussion of the active area of research on hyperparameter tuning for offline RL.
+We also discuss this further in Appendix \ref{sec:app_exp_setup}.
+
+
+\section{Related work}
+
+Most prior work on deep offline RL consists of iterative actor-critic algorithms. The primary innovation of each paper is to propose a different mechanism to ensure that he learned policy does not stray too far from the data generated by the behavior policy. Broadly, we group these methods into three camps: policy constraints/regularization, modified of imitation learning, and Q regularization:
+
+\begin{enumerate}[leftmargin=*]
+\item The majority of prior work acts directly on the policy.
+Some authors have proposed explicit constraints on the learned policy to only select actions where $ (s,a)$ has sufficient support under the data generating distribution \citep{fujimoto2018off, fujimoto2019benchmarking, laroche2019safe}.
+Another proposal is to regularize the learned policy towards the behavior policy \citep{wu2019behavior} usually either with a KL divergence \citep{jaques2019way} or MMD \citep{kumar2019stabilizing}. This is a very straighforward way to stay close to the behavior with a hyperparameter that determines just how close. All of these algorithms are iterative and rely on off-policy evaluation.
+
+\item \citep{Siegel2020Keep, wang2020critic, chen2020bail} all use algorithms that filter out datapoints with low Q values and then perform imitation learning.
+\citep{wang2018exponentially, peng2019advantage} use a weighted imitation learning algorithm where the weights are determined by exponentiated Q values.
+These algorithms are iterative.
+\item Another way to prevent the learned policy from choosing unknown actions is to incorporate some form of regularization to encourage staying near the behavior and being pessimistic about unknown state, action pairs \citep{wu2019behavior, nachum2019algaedice, kumar2020conservative, kostrikov2021offline}.
+However, properly being able to quantify uncertainty about unknown states is notoriously difficult when dealing with neural network value functions \citep{buckman2020importance}.
+Again all of these algorithms are iterative.
+\end{enumerate}
+
+
+Some recent work has also noted that optimizing policies based on the behavior value function can perform surprisingly well \citep{gulcehre2020rl, goo2020you}. However, these papers propose complicated variants of the one-step approach involving ensembles, non-standard regularizers and paraterizations or ensembles and distributional Q functions. In contrast, we implement the simplest possible one-step algorithms without any modifications to the network architecture or standard regularizers/constraints.
+Moreover, we focus on providing an analysis of when and why this simple baseline works.
+
+There are also important connections between the one-step algorithm and the literature on conservative policy improvement \citep{kakade2002approximately, schulman2015trust, achiam2017constrained}, which we discuss in more detail in Appendix \ref{sec:app_improvement}.
+
+
+\section{Defining the algorithms}
+
+In this section we provide a unified algorithmic template for offline RL algorithms as offline approximate modified policy iteration. We show how this template captures our one-step algorithm as well as a multi-step policy iteration algorithm and an iterative actor-critic algorithm.
+Then any choice of policy evaluation and policy improvement operators defines one-step, multi-step, and iterative algorithms.
+
+%Full details about our implementation can be found in Appendix \warn{write up implementation}.
+
+\subsection{Algorithmic template}
+
+We consider a generic offline approximate modified policy iteration (OAMPI) scheme, shown in Algorithm \ref{alg:oapi}. Essentially the algorithm alternates between two steps. First, there is a policy evaluation step where we estimate the Q function of the current policy $ \pi_{k-1}$ by $ \widehat Q^{\pi_{k-1}}$ using only the dataset $ D_N$. Implementations also often use the prior Q estimate $ \widehat Q^{\pi_{k-2}}$ to warm-start the approximation process. Second, there is a policy improvement step. This step takes in the estimated Q function $ \widehat Q^{\pi_{k-1}}$, the estimated behavior $ \hat \beta$, and the dataset $ D_N$ and produces a new policy $ \pi_k$. Again an algorithm may use $ \pi_{k-1}$ to warm-start the optimization. Moreover, we expect this improvement step to be regularized or constrained to ensure that $ \pi_k$ remains in the support of $ \beta$ and $ D_N$. Choices for this regularization/constraint are discussed below. Now we discuss a few ways to instantiate the template.
+
+\begin{figure*}[h]
+\vspace{-0.5cm}
+\begin{algorithm}[H]
+    \caption{OAMPI}
+    \label{alg:oapi}
+    \begin{algorithmic}[1]
+             \Require{$ K$, dataset $ D_N$,  estimated behavior $ \hat \beta$}
+
+             \State Set $\pi_0 = \hat \beta$. Initialize $ \widehat Q^{\pi_{-1}}$ randomly.
+
+             \For{k = 1, \dots, K}
+             \State Policy evaluation: $ \widehat Q^{\pi_{k-1}} = \mathcal{Q}(\pi_{k-1}, D_N, \widehat Q^{\pi_{k-2}})$
+
+             \State Policy improvement: $ \pi_{k} = \mathcal{I}(\widehat Q^{\pi_{k-1}}, \hat \beta, D_N, \pi_{k-1})$
+             \EndFor
+        \end{algorithmic}
+    \end{algorithm}
+\end{figure*}
+
+
+
+\paragraph{One-step.}
+The simplest algorithm sets the number of iterations $ K = 1$. We train the policy evaluation to estimate $ Q^\beta$, and then use one of the policy improvement operators discussed below to find the resulting $ \pi_1$.
+
+
+\paragraph{Multi-step.}
+The multi-step algorithm now sets $ K >1$. The evaluation operator must evaluate off-policy since $ D_N$ is collected by $ \beta$, but evaluation steps for $ K \geq 2$ require evaluating policies $ \pi_{k-1}\neq \beta$. Each iteration is trained to convergence in both the estimation and improvement steps.
+
+\paragraph{Iterative actor-critic.}
+
+An actor critic approach looks somewhat like multistep policy iteration, but does not attempt to train to convergence at each iteration. Instead, each iteration consists of one gradient step to update the Q estimate and one gradient step to improve the policy. Since all of the evaluation and improvement operators that we consider are gradient-based, this algorithm can adapt the same evaluation and improvement operators used by the multi-step algorithm. Most algorithms from the literature fall into this category \citep{fujimoto2018off, kumar2019stabilizing, kumar2020conservative, wu2019behavior,  wang2020critic, Siegel2020Keep}.
+
+
+\subsection{Policy evaluation operators}
+
+Following prior work on continuous state and action problems, we always evaluate by simple fitted Q evaluation \citep{fujimoto2018off, kumar2019stabilizing, Siegel2020Keep, wang2020critic, paine2020hyperparameter, wang2021instabilities}.
+Explicitly the evaluation step for the one-step or multi-step algorithms looks like
+\begin{align}
+     \mathcal{Q}(\pi_{k-1}, D_N, \widehat Q^{\pi_{k-2}}) = \arg\min_Q \sum_{i=1}^N \left(r(s_i,a_i) + \gamma \E_{a'\sim \pi_{k-1}|s_i'}Q(s_i', a') - Q(s_i, a_i) \right)^2,
+\end{align}
+where the right hand side may depend on $\widehat Q^{\pi_{k-2}}$ to warm-start optimization.
+In practice this is optimized by stochastic gradient descent with the use of a target network \citep{mnih2015human}.
+For the iterative algorithm the $ \arg\min$ is replaced by a single stochastic gradient step.
+We estimate the expectation over next state by a single sample from $ \pi_{k-1}$ (or from the dataset in the case when $ \pi_{k-1} = \hat \beta$). See \cite{voloshin2019empirical, wang2021instabilities} for more comprehensive examinations of this evaluation step.
+
+
+
+\subsection{Policy improvement operators}
+
+To instantiate the template, we also need to choose a specific policy improvement operator $ \mathcal{I}$. We consider the following improvement operators selected from those discussed in the related work section. Each operator has a hyperparameter controlling deviation from the behavior policy.
+
+\paragraph{Behavior cloning.} The simplest baseline worth including is to just return $ \hat \beta$ as the new policy $ \pi$. Any policy improvement operator ought to perform at least as well as this baseline.
+
+
+% \paragraph{Greedy.} The naive policy improvement operator just acts greedily with respect to $ \widehat Q^\beta$ so that $\hat \pi(a|s) = \one[a = \arg\max_{a'} \widehat Q^\beta(s, a')]$.
+% Calculating this arg max may not feasible in a continuous action space, so we can instead amortize the computation by learning a neural network policy to maximize the estimated Q values such that
+% \begin{align}
+%     \pi_k = \mathcal{I}(\widehat Q, \hat \beta, D_N, \pi_{k-1}) =  \arg\max_{\pi} \sum_i \E_{a\sim \pi|s_i} [\widehat Q (s_i, a)]
+% \end{align}
+% where the optimization can be performed using stochastic optimization via the reparameterization trick. Specifically, at each iteration we (1) sample a minibatch of datapoints, (2) sample one reparameterized action for each state in the minibatch, and then (3) backpropogate to get a stochastic gradient estimate.
+
+
+\paragraph{Constrained policy updates.}
+Algorithms like BCQ \citep{fujimoto2018off} and SPIBB \citep{laroche2019safe} constrain the policy updates to be within the support of the data/behavior.
+% The SPIBB algorithm requires uncertainty estimates that are difficult to quantify in continuous state and action spaces, and both of these algorithms are somewhat complicated.
+In favor of simplicity, we implement a simplified version of the BCQ algorithm that removes the policy correction network which we call Easy BCQ.
+We define a new policy $ \hat \pi^M_{k}$ by drawing $ M $ samples from $ \hat \beta$ and then executing the one with the highest value according to $ \widehat Q^\beta$. Explicitly:
+\begin{align}
+    \hat \pi^M_{k}(a|s) = \one[a = \arg\max_{a_j} \{\widehat Q^{\pi_{k-1}}(s, a_j): a_j \sim \pi_{k-1}(\cdot|s),\ 1 \leq j \leq M\}].
+\end{align}
+
+% Note, we can think about this policy in terms of pushforward distributions where we are taking an $ n$th order statistic of $ M $ samples from $ \widehat Q_\sharp^\beta (s, \hat \beta)$. If we let $ F$ be the CDF of $ \widehat Q_\sharp^\beta (s, \hat \beta)$ and $ F_M$ be the CDF of $ \widehat Q_\sharp^\beta (s, \hat \pi_M)$, it is straightforward to see that
+% \begin{align}
+%     F_M(v) = F(v)^M.
+% \end{align}
+% Thus, we know that we are moving mass in a strictly increasing way, and can come up with a policy improvement guarantee similar to the one we have for QFIL, but in terms of the difference between $ F(v) $ and $ F(v)^M$.
+
+% This sort of analysis is novel since prior work on BCQ \citep{fujimoto2018addressing} proposes a more complicated algorithm and only provides a tabular analysis.
+
+
+
+\paragraph{Regularized policy updates.}
+Another common idea proposed in the literature is to regularize towards the behavior policy \citep{wu2019behavior, jaques2019way, kumar2019stabilizing, ma2019imitation}. For a general divergence $ D$ we can define an algorithm that maximizes a regularized objective:
+\begin{align}
+    \hat \pi^\alpha_k = \arg\max_\pi \sum_{i}  \E_{a\sim \pi|s}[\widehat Q^{\pi_{k-1}}(s_i, a)] - \alpha D(\hat \beta(\cdot|s_i), \pi(\cdot|s_i))
+\end{align}
+
+A comprehensive review of different variants of this method can be found in \cite{wu2019behavior} which does not find dramatic differences across regularization techniques.
+In practice, we will use reverse KL divergence,  i.e. $ KL( \pi(\cdot|s_i) \| \hat \beta(\cdot|s_i))$.
+%For the forward KL, i.e. $ KL(\beta(\cdot|s_i) \| \pi(\cdot|s_i))$, we can simply use the sampled action $ a_i$ from the dataset to estimate the divergence.
+To compute the reverse KL, we draw samples from $ \pi(\cdot |s_i)$ and use the density estimate $ \hat \beta$ to compute the divergence. Intuitively, this regularization forces $ \pi$ to remain within the support of $ \beta$ rather than incentivizing $ \pi$ to cover beta.
+
+
+\paragraph{Variants of imitation learning.}
+Another idea, proposed by \citep{wang2018exponentially, Siegel2020Keep, wang2020critic, chen2020bail} is to modify an imitation learning algorithm either by filtering or weighting the observed actions so as to get a policy improvement. The weighted version that we implement uses exponentiated advantage estimates to weight the observed actions:
+\begin{align}
+    \hat \pi^\tau_k = \arg\max_\pi \sum_{i}  \exp(\tau (\widehat Q^{\pi_{k-1}}(s_i, a_i) - \widehat V(s_i))) \log \pi(a_i|s_i).
+\end{align}
+%This can also be derived as a variational implementation of the reverse-KL regularized update, as is done in \cite{wang2018exponentially}.
+
+% \begin{align}
+%     \hat \pi_b (a|s) = \arg\max_\pi \sum_{i}  \1[\widehat Q^\beta(s_i, a_i) \geq b(s_i)] \log \pi(a_i|s_i)
+% \end{align}
+
+
+
+
+
+\section{Benchmark Results}\label{sec:bench}
+
+Our main empirical finding is that one step of policy improvement is sufficient to beat state of the art results on much of the D4RL benchmark suite \cite{fu2020d4rl}.
+This is striking since prior work focuses on iteratively estimating the Q function of the current policy iterate, but we only use one-step derived from $ \widehat Q^\beta$. Results are shown in Table~\ref{tab:d4rl}. Full experimental details are in Appendix \ref{sec:app_exp_setup}.
+
+\begin{table}[h]
+    \centering
+    \caption{Results of one-step algorithms on the D4RL benchmark. The first column gives the best results across several iterative algorithms considered in \cite{fu2020d4rl}. We run 3 seeds and each algorithm is tuned over 6 values of their respective hyperparameter. We report the mean and standard deviation over seeds on 100 evaluation episodes per seed. We \textbf{bold} the best result on each dataset and \textcolor{blue}{blue} any result where a one-step algorithm beat the best reported iterative result from \cite{fu2020d4rl}. We use m for medium, m-e for medium-expert, m-re for medium-replay, r for random, and c for cloned.}
+    \begin{small}
+    \begin{tabular}{lccccc}
+        \toprule & Iterative & \multicolumn{4}{c}{One-step}\\
+        \cmidrule(lr){2-2} \cmidrule(lr){3-6}
+         & \cite{fu2020d4rl} & BC & Easy BCQ  & Rev. KL Reg & Exp. Weight \\
+        \midrule
+        halfcheetah-m & 46.3 &
+                        41.9  $\pm$  0.1 &
+                        \textcolor{blue}{52.6  $\pm$  0.2}  &
+                        \textcolor{blue}{\textbf{55.2  $\pm$  0.4 }} &
+                        \textcolor{blue}{48.4  $\pm$  0.1} \\
+        walker2d-m & 81.1 &
+                        68.6  $\pm$  6.3 &
+                        \textcolor{blue}{\textbf{87.2  $\pm$  1.3}} &
+                        \textcolor{blue}{85.9  $\pm$  1.4} &
+                        \textcolor{blue}{81.8  $\pm$  2.2}  \\
+        hopper-m & 58.8 &
+                        49.9  $\pm$  3.1 &
+                        \textcolor{blue}{74.5  $\pm$  6.2}&
+                        \textcolor{blue}{\textbf{83.7  $\pm$  4.5}} &
+                        \textcolor{blue}{59.6  $\pm$  2.5}\\
+        \midrule
+        halfcheetah-m-e & 64.7 &
+                        61.1  $\pm$  2.7 &
+                        \textcolor{blue}{78.2  $\pm$  1.6}  &
+                        \textcolor{blue}{\textbf{93.8  $\pm$  0.5}} &
+                        \textcolor{blue}{93.4  $\pm$  1.6} \\
+        walker2d-m-e & 111.0 &
+                        78.5  $\pm$  22.4 &
+                        \textcolor{blue}{112.2  $\pm$  0.3}   &
+                        \textcolor{blue}{111.2  $\pm$  0.2}  &
+                        \textcolor{blue}{\textbf{113.0  $\pm$  0.4}}  \\
+        hopper-m-e & \textbf{111.9} &
+                        49.1  $\pm$  4.3 &
+                        85.1  $\pm$  2.2 &
+                        98.7  $\pm$  7.5 &
+                        103.3  $\pm$  9.1 \\
+        \midrule
+        halfcheetah-m-re & \textbf{47.7} &
+                         34.6  $\pm$  0.9 &
+                         38.3  $\pm$  0.3  &
+                        41.9  $\pm$  0.5 &
+                         38.1  $\pm$  1.3 \\
+        walker2d-m-re & 26.7 &
+                        26.6  $\pm$  3.4  &
+                         \textcolor{blue}{69.1  $\pm$  4.2} &
+                        \textcolor{blue}{\textbf{74.9  $\pm$  6.6}} &
+                         \textcolor{blue}{49.5  $\pm$  12.0}  \\
+        hopper-m-re & 48.6 &
+                       23.1  $\pm$  2.7 &
+                        \textcolor{blue}{78.4  $\pm$  7.2} &
+                        \textcolor{blue}{92.3  $\pm$  1.1} &
+                        \textcolor{blue}{\textbf{97.5  $\pm$  0.7}}\\
+        \midrule
+        halfcheetah-r & \textbf{35.4} &
+                        2.2  $\pm$  0.0 &
+                        5.4  $\pm$  0.3 &
+                        8.8  $\pm$  3.8   &
+                        3.2  $\pm$  0.1 \\
+        walker2d-r & \textbf{7.3} &
+                        0.9  $\pm$  0.1 &
+                        3.7  $\pm$  0.1  &
+                        6.2  $\pm$  0.7 &
+                        5.6  $\pm$  0.8 \\
+        hopper-r & \textbf{12.2} &
+                        2.0  $\pm$  0.1 &
+                        6.6  $\pm$  0.1 &
+                        7.9  $\pm$  0.7 &
+                        7.5  $\pm$  0.4  \\
+        \midrule
+        pen-c & 56.9 &
+                    46.9  $\pm$  11.0 &
+                    \textcolor{blue}{\textbf{65.9  $\pm$  3.6}} &
+                    \textcolor{blue}{57.4  $\pm$  3.5} &
+                    \textcolor{blue}{60.0  $\pm$  4.1} \\
+        hammer-c & 2.1 &
+                    0.4  $\pm$  0.1  &
+                    \textcolor{blue}{\textbf{2.9  $\pm$  0.5 }} &
+                    0.2  $\pm$  0.1 &
+                    2.1  $\pm$  0.7  \\
+        relocate-c & -0.1 &
+                    -0.1  $\pm$  0.0 &
+                    \textcolor{blue}{\textbf{0.3  $\pm$  0.2}} &
+                    \textcolor{blue}{0.2  $\pm$  0.1} &
+                    \textcolor{blue}{0.2  $\pm$  0.1}   \\
+         door-c & 0.4 &
+                    0.0  $\pm$  0.1 &
+                    \textcolor{blue}{\textbf{0.6  $\pm$  0.6}} &
+                    0.2  $\pm$  0.7 &
+                    0.2  $\pm$  0.3 \\
+        \bottomrule
+    \end{tabular}
+    \end{small}
+    \label{tab:d4rl}
+\end{table}
+
+% Goo:
+% m: 35.6,  68.6, 76.4
+% m-e: 16.6,  92.7, 106.4,
+% m-re: 34.4,  41.5, 94.8
+% r: 7.2, 8.1, 9.8
+% c: 61.2, 0.4, -0.2, 1.1
+
+
+
+As we can see in the table, all of the one-step algorithms usually outperform the best iterative algorithms tested by \citet{fu2020d4rl}.
+The one notable exception is the case of random data (especially on halfcheetah), where iterative algorithms have a clear advantage. We will discuss potential causes of this further in Section \ref{sec:when}.
+
+To give a more direct comparison that controls for any potential implementation details, we use our implementation of reverse KL regularization to create multi-step and iterative algorithms. We are not using algorithmic modifications like Q ensembles, regularized Q values, or early stopping that have been used in prior work. But, our iterative algorithm recovers similar performance to prior regularized actor-critic approaches. These results are shown in Table~\ref{tab:multi}.
+
+\begin{table}[h]
+\vspace{-0.5 cm}
+    \centering
+    \caption{Results of reverse KL regularization on the D4RL benchmark across one-step, multi-step, and iterative algorithms. Again we run 3 seeds and 6 hyperparameters and report the mean and standard deviation across seeds using 100 evaluation episodes.}
+    \begin{small}
+    \begin{tabular}{lccc}
+        \toprule
+         & One-step & Multi-step & Iterative \\
+        \midrule
+        halfcheetah-m &
+                        55.2  $\pm$  0.4  &
+                        \textbf{59.3  $\pm$  0.7} &
+                        51.2  $\pm$  0.2\\
+        walker2d-m &
+                        \textbf{85.9  $\pm$  1.4} &
+                        74.5  $\pm$  2.8    &
+                        74.8  $\pm$  0.7  \\
+        hopper-m &
+                        \textbf{83.7  $\pm$  4.5} &
+                        54.8  $\pm$  4.3  &
+                        54.7  $\pm$  1.9\\
+        \midrule
+        halfcheetah-m-e &
+                        93.8  $\pm$  0.5 &
+                        \textbf{94.2  $\pm$  0.5} &
+                        93.7  $\pm$  0.6 \\
+        walker2d-m-e &
+                        \textbf{111.2  $\pm$  0.2} &
+                        109.8  $\pm$  0.3  &
+                        108.7  $\pm$  0.6 \\
+        hopper-m-e &
+                        \textbf{98.7  $\pm$  7.5} &
+                        90.6  $\pm$  18.8 &
+                        94.5  $\pm$  11.9\\
+        \midrule
+        halfcheetah-r &
+                        8.8  $\pm$  3.8  &
+                        18.3  $\pm$  6.5 &
+                        \textbf{21.2  $\pm$  5.2}\\
+        walker2d-r &
+                        \textbf{6.2  $\pm$  0.7} &
+                        5.4  $\pm$  0.2 &
+                        5.4  $\pm$  0.4\\
+        hopper-r &
+                        7.9  $\pm$  0.7 &
+                        \textbf{21.9  $\pm$  8.9} &
+                        9.7  $\pm$  0.4\\
+        \bottomrule
+    \end{tabular}
+    \end{small}
+    \label{tab:multi}
+\end{table}
+
+Put together, these results immediately suggest some guidance to the practitioner: it is worthwhile to run the one-step algorithm as a baseline before trying something more elaborate. The one-step algorithm is substantially simpler than prior work, but usually achieves better performance.
+
+
+
+% \subsection{Benchmarking QFIL}
+
+% \begin{figure}[h]
+%     \centering
+%     \includegraphics[width=0.3\textwidth]{figures/offline-rl/benchmark/hc-m.png}\includegraphics[width=0.3\textwidth]{figures/offline-rl/benchmark/hc-me.png}\includegraphics[width=0.3\textwidth]{figures/offline-rl/benchmark/hc-r.png}\\
+%     \includegraphics[width=0.3\textwidth]{figures/offline-rl/benchmark/w-m.png}\includegraphics[width=0.3\textwidth]{figures/offline-rl/benchmark/w-me.png}\includegraphics[width=0.3\textwidth]{figures/offline-rl/benchmark/w-r.png}\\
+%     \includegraphics[width=0.3\textwidth]{figures/offline-rl/benchmark/h-m.png}\includegraphics[width=0.3\textwidth]{figures/offline-rl/benchmark/h-me.png}\includegraphics[width=0.3\textwidth]{figures/offline-rl/benchmark/h-r.png}
+%     \caption{Results on the D4RL benchmark, with state of the art (SOTA) taken from \cite{fu2020d4rl}. \qfil\ beats the state of the art on 6 out of 9 datasets shown in the figure and always makes a substantial improvement over behavior cloning (BC).}
+%     \label{fig:benchmark}
+% \end{figure}
+
+
+
+
+
+
+
+
+
+
+
+\section{What goes wrong for iterative algorithms?}\label{sec:why}
+
+
+% \subsection{Policy improvement perspective}
+
+% We can modify the performance difference lemma to measure the difference between two policies $ \pi_1, \pi_2$ using the state distribution derived from the behavior $ \beta$.
+
+% \begin{lemma}[Approximate three-way performance difference]
+% For any three policies $ \pi_2, \pi_1$ and $ \beta$,
+% \begin{align}
+%     (1-\gamma) (J(\pi_2) &- J(\pi_1)) = \underbrace{\E_{s\sim d_\beta}[\widehat Q^{\pi_1}(s,\pi_2) - \widehat Q^{\pi_1}(s,{\pi_1})]}_{Estimated\ improvement} \\ &- \underbrace{\E_{s\sim d_\beta}\left[(\widehat Q^{\pi_1}(s,\pi_2) - Q^{\pi_1}(s, \pi_2)) + (Q^{\pi_1}(s,{\pi_1}) - \widehat Q^{\pi_1}(s, {\pi_1})) \right]}_{Evaluation\ error}\\
+%     &- \underbrace{\E_{\substack{s\sim d_\beta \\ s' \sim d_{\pi_2}}}\left[(Q^{\pi_1}(s, \pi_2) - Q^{\pi_1}(s', \pi_2) ) + (Q^{\pi_1}(s', \pi_1) - Q^{\pi_1}(s, \pi_1)) \right]}_{State\ distribution\ mismatch}
+% \end{align}
+% \end{lemma}
+
+The benchmark experiments show that one step of policy improvement often beats iterative and multi-step algorithms. In this section we dive deeper to understand why this happens. First, by examining the learning curves of each of the algorithms we note that iterative algorithms require stronger regularization to avoid instability. Then we identify two causes of this instability: \emph{distribution shift} and \emph{iterative error exploitation}.
+
+Distribution shift causes evaluation error by reducing the effective sample size in the fixed dataset for evaluating the current policy and has been extensively considered in prior work as discussed below. Iterative error exploitation occurs when we repeatedly optimize policies against our Q estimates and exploit their errors. This introduces a bias towards overestimation at each step (much like the training error in supervised learning is biased to be lower than the test error). Moreover, by iteratively re-using the data and using prior Q estimates to warmstart training at each step, the errors from one step are amplified at the next. This type of error is particular to multi-step and iterative algorithms.
+
+\subsection{Learning curves and hyperparameter sensitivity}
+
+To begin to understand why iterative and multi-step algorithms can fail it is instructive to look at the learning curves. As shown in Figure \ref{fig:learning_curves}, we often observe that the iterative algorithm will begin to learn and then crash. Regularization can help to prevent this crash since strong enough regularization towards the behavior policy ensures that the evaluation is nearly on-policy.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=\textwidth]{figures/offline-rl/learning curves/learning_curves.png}
+    \caption{Learning curves and final performance on halfcheetah-medium across different algorithms and regularization hyperparameters. Error bars show min and max over 3 seeds. Similar figures for other datasets from D4RL can be found in Appendix~\ref{sec:app_extra_exp}.}
+    \label{fig:learning_curves}
+\end{figure}
+
+In contrast, the one-step algorithm is more robust to the regularization hyperparameter. The rightmost panel of the figure shows this clearly. While iterative and multi-step algorithms can have their performance degrade very rapidly with the wrong setting of the hyperparameter, the one-step approach is more stable.
+Moreover, we usually find that the optimal setting of the regularization hyperparameter is lower for the one-step algorithm than the iterative or multi-step approaches.
+
+
+
+
+
+
+
+\subsection{Distribution shift}
+
+Any algorithm that relies on off-policy evaluation will struggle with distribution shift in the evaluation step. Trying to evaluate a policy that is substantially different from the behavior reduces the effective sample size and increases the variance of the estimates. Explicitly, by distribution shift we mean the shift between the behavior distribution (the distribution over state-action pairs in the dataset) and the evaluation distribution (the distribution that would be induced by the policy $ \pi$ we want to evaluate).
+
+\paragraph{Prior work.} There is a substantial body of prior theoretical work that suggests that off-policy evaluation can be difficult and this difficulty scales with some measure of distribution shift.
+%\cite{jiang2016doubly} give an exponential (in horizon) lower bound on sample complexity in the tabular setting for any unbiased estimator from the Cramer-Rao lower bound.
+\citet{wang2020statistical, Amortila2020AVO, zanette2021exponential} give exponential (in horizon) lower bounds on sample complexity in the linear setting even with good feature representations that can represent the desired Q function and assuming good data coverage.
+Upper bounds generally require very strong assumptions on both the representation and limits on the distribution shift \citep{wang2021instabilities, duan2020minimax, chen2019information}. Moreover, the assumed bounds on distribution shift can be exponential in horizon in the worst case.
+% The literature on policy improvement also suggests limiting distribution shift \citep{kakade2002approximately, schulman2015trust, achiam2017constrained}. We discuss how the guarantees from this literature apply directly to the one-step but not multi-step algorithms in more detail in Appendix \ref{sec:app_improvement}. \warn{TODO: link this in better}
+On the empirical side, \citet{wang2021instabilities} demonstrates issues with distribution shift when learning from pre-trained features and provides a nice discussion of why distribution shift causes error amplification. \citet{fujimoto2018off} raises a similar issue under the name ``extrapolation error''. Regularization and constraints are meant to reduce issues stemming from distribution shift, but also reduce the potential for improvement over the behavior.
+
+
+\paragraph{Empirical evidence.} Both the multi-step and iterative algorithms in our experiments rely on off-policy evaluation as a key subroutine. We examine how easy it is to evaluate the policies encountered along the learning trajectory. To control for issues of iterative error exploitation (discussed in the next subsection), we train Q estimators from scratch on a heldout evaluation dataset sampled from the behavior policy. We then evaluate these trained Q function on rollouts from 1000 datapoints sampled from the replay buffer. Results are shown in Figure~\ref{fig:mse}.
+
+
+The results show a correlation betweed KL and MSE. Moreover, we see that the MSE generally increases over training. One way to mitigate this, as seen in the figure, is to use a large value of $ \alpha$. We just cannot take a very large step before running into problems with distribution shift. But, when we take such a small step, the information from the on-policy $ \widehat Q^\beta$ is about as useful as the newly estimated $ \widehat Q^\pi$. This is seen, for example, in Figure \ref{fig:learning_curves} where we get very similar performance across algorithms at high levels of regularization.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=\textwidth]{figures/offline-rl/mse/mse_vs_kl.png}
+    \caption{Results of running the iterative algorithm on halfcheetah-medium. Each checkpointed policy is evaluated by a Q function trained from scratch on heldout data. MSE refers to $\E_{s,a\sim \beta}[\hat Q^{\pi_i}(s,a) - Q^{\pi_i}(s,a)]$ and KL refers to $ \E_{s\sim \beta}[KL(\pi(\cdot|s)\| \beta(\cdot|s)]$. Left: 90 policies taken from various points in training with various hyperaparmeters and random seeds. Center: MSE learning curves. Right: KL learning curves. Error bars show min and max over 3 random seeds.}
+    \label{fig:mse}
+\end{figure}
+
+
+\subsection{Iterative error exploitation}
+
+The previous subsection identifies how any algorithm that uses off-policy evaluation is fundamentally limited by distribution shift, even if we were given fresh data and trained Q functions from scratch at every iteration. But, in practice, iterative algorithms repeatedly iterate between optimizing policies against estimated Q functions and re-estimating the Q functions using the \emph{same data} and using the Q function from the previous step to warm-start the re-estimation. This induces dependence between steps that causes a problem that we call iterative error exploitation.
+
+
+\paragraph{Intuition about the problem.} In short, iterative error exploitation happens because $ \pi_i$ tends to choose overestimated actions in the policy improvement step, and then this overestimation propagates via dynamic programming in the policy evaluation step. To illustrate this issue more formally, consider the following: at each $ s,a$ we suffer some Bellman error $ \varepsilon_\beta^\pi(s,a)$ based on our fixed dataset collected by $ \beta$. Formally,
+\begin{align}
+    \widehat Q^\pi(s,a) = r(s,a) + \gamma \E_{\substack{s'|s,a \\ a'\sim \pi|s'}}[\widehat Q^\pi(s',a')] + \varepsilon_\beta^\pi(s,a).
+\end{align}
+Intuitively, $ \varepsilon_\beta^\pi$ will be larger at state-actions with less coverage in the dataset collected by $ \beta$. Note that $ \varepsilon_\beta^\pi $ can absorb all noise due to our finite dataset as well as function approximation error.
+
+%So far this is all fully general, such an $ \varepsilon_\beta^\pi$ can always be defined for any estimated Q function. Now we will make the simplifying assumption.
+All that is needed to cause iterative error exploitation is that the $ \epsilon_\beta^\pi$ are highly correlated across different $ \pi$, but for simplicity, we will assume that $ \varepsilon_\beta^\pi$ is \emph{the same} for all policies $ \pi$ estimated from our fixed offline dataset and instead write $ \varepsilon_\beta$. Now that the errors do not depend on the policy we can treat the errors as auxiliary rewards that obscure the true rewards and see that
+\begin{align}
+    \widehat Q^\pi(s,a) = Q^\pi(s,a) + \widetilde Q^\pi_\beta(s,a), \qquad \widetilde Q^\pi_\beta(s,a) := \E_{\pi| s_0, a_0 = s,a }\left[\sum_{t=0}^\infty \gamma^t \varepsilon_\beta(s_t,a_t) \right].
+\end{align}
+This assumption is somewhat reasonable since we expect the error to primarily depend on the data. And, when the prior Q function is used to warm-start the current one (as is generally the case in practice), the approximation errors are automatically passed between steps.
+
+Now we can explain the problem. Recall that under our assumption the $ \varepsilon_\beta $ are fixed once we have a dataset and likely to have larger magnitude the further we go from the support of the dataset. So, with each step $ \pi_i$ is able to better maximize $ \varepsilon_\beta$, thus moving further from $ \beta$ and increasing the magnitude of $ \widetilde Q^{\pi_i}_\beta$ relative to $ Q^{\pi_i}$. Even though $ Q^{\pi_i}$ may provide better signal than $ Q^\beta$, it can easily be drowned out by $ \widetilde Q^{\pi_i}_\beta$. In contrast, $ \widetilde Q_\beta^\beta$ has small magnitude, so the one-step algorithm is robust to errors\endnote{We should note that iterative error exploitation is similar to the overestimation addressed by double Q learning \citep{van2016deep, fujimoto2018addressing}, but distinct. Since we are in the offline setting, the errors due to our finite dataset can be iteratively exploited more and more, while in the online setting considered by double Q learning, fresh data prevents this issue. We are also considering an algorithm based on policy iteration rather than value iteration.}.
+
+\paragraph{An example.} Now we consider a simple gridworld example to illustrate iterative error exploitation. This example fits exactly into the setup outlined above since all errors are due to reward estimation so the $ \varepsilon_\beta$ is indeed constant over all $ \pi$. The gridworld we consider has one deterministic good state with reward 1 and many stochastic bad states that have rewards distributed as $ \mathcal{N}(-0.5, 1)$. We collect a dataset of 100 trajectories, each of length 100. One run of the multi-step offline regularized policy iteration algorithm is illustrated in Figure \ref{fig:gridworld}.
+
+\begin{figure}[h]
+    \centering
+    %\includegraphics[width = 0.8\textwidth]{figures/offline-rl/gridworld/gridworld_onestep.png}
+    \includegraphics[width=\textwidth]{figures/offline-rl/gridworld/gridworld_flat.png}
+    \includegraphics[width=\textwidth]{figures/offline-rl/gridworld/gridworld_error.png}
+    \caption{An illustration of multi-step offline regularized policy iteration. The leftmost panel in each row shows the true reward (top) or error $ \varepsilon_\beta$ (bottom). Then each subsequent panel plots $ \pi_i$ (with arrow size proportional to $ \pi_i(a|s)$) over either $ Q^{\pi_i}$ (top) or $ \widetilde Q^{\pi}_\beta $ (bottom), averaged over actions at each state. The one-step policy ($ \pi_1$) has the highest value. The behavior policy here is a mixture of optimal $ \pi^*$ and uniform $ u $ with coefficient 0.2 so that $\beta = 0.2 \cdot \pi^* + 0.8 \cdot u$. We set $ \alpha = 0.1$ as the regularization parameter for reverse KL regularization.}
+    \label{fig:gridworld}
+\end{figure}
+
+
+In the example, like in the D4RL benchmark, we see that one step outperforms multiple steps of improvement. Intuitively, when there are so many noisy states, it is likely that a few of them will be overestimated. Since the data is re-used for each step, these overestimations persist and propagate across the state space due to iterative error exploitation. This property of having many bad, but poorly estimated states likely also exists in the high-dimensional control problems encountered in the benchmark where there are many ways for the robots to fall down that are not observed in the data for non-random behavior.
+\begin{figure}[h]
+\vspace{-0.5cm}
+    \centering
+    \includegraphics[width=0.6\textwidth]{figures/offline-rl/estimation/histograms.png}
+    \caption{Histograms of overestimation error ($\widehat Q^{\pi_i}(s,a) - Q^{\pi_i}(s,a)$) on halfcheetah-medium with the iterative algorithm. Left: errors from the training Q function. Right: errors from an independently trained Q function.}
+    \label{fig:over}
+\end{figure}
+Moreover, both settings have larger errors in areas where we have less data.
+So even though the errors in the gridworld are caused by noise in the rewards, while errors in D4RL are caused by function approximation, we think this is a useful mental model of the problem.
+
+\paragraph{Empirical evidence.}
+In practice we cannot easily visualize the progression of errors. However, the dependence between steps still arises as overestimation of the Q values. We can track the overestimation of the Q values over training as a way to measure how much bias is being induced by optimizing against our dependent Q estimators. As a control we can also train Q estimators from scratch on independently sampled evaluation data. These independently trained Q functions do not have the same overestimation bias even though the squared error does tend to increase as the policy moves further from the behavior (as seen in Figure \ref{fig:mse}).
+Explicitly, we track 1000 state, action pairs from the replay buffer over training. For each checkpointed policy we perform 3 rollouts at each state to get an estimate of the true Q value and compare this to the estimated Q value. Results are shown in Figure \ref{fig:over}.
+
+
+
+
+
+
+
+
+\section{When are multiple steps useful?}\label{sec:when}
+
+So far we have focused on why the one-step algorithm often works better than the multi-step and iterative algorithms. However, we do not want to give the impression that one-step is always better. Indeed, our own experiments in Section \ref{sec:bench} show a clear advantage for the multi-step and iterative approaches when we have randomly collected data. While we cannot offer a precise delineation of when one-step will outperform multi-step, in this section we offer some intuition as to when we can expect to see benefits from multiple steps of policy improvement.
+
+As seen in Section~\ref{sec:why}, multi-step and iterative algorithms have problems when they propagate estimation errors. This is especially problematic in noisy and/or high dimensional environments. While the multi-step algorithms propagate this noise more widely than the one-step algorithm, they also propagate the signal. So, when we have sufficient coverage to reduce the magnitude of the noise, this increased propagation of signal can be beneficial. The D4RL experiments suggest that we are usually on the side of the tradeoff where the errors are large enough to make one-step preferable.
+
+
+\begin{figure}[h]
+\vspace{-0.3cm}
+    \centering
+    \includegraphics[width=0.4\textwidth]{figures/offline-rl/learning curves/r-m_mixture.png}
+    \caption{Performance of all three algorithms with reverse KL regularization across mixtures between halfcheetah-random and halfcheetah-medium. Error bars indicate min and max over 3 seeds.}
+    \label{fig:interp}
+\end{figure}
+
+In Appendix~\ref{sec:app_grid} we illustrate a simple gridworld example where a slight modification of the behavior policy from Figure~\ref{fig:gridworld} makes multi-step dramatically outperform one-step. This modified behavior policy (1) has better coverage of the noisy states (which reduces error, helping multi-step), and (2) does a worse job propagating the reward from the good state (hurting one-step).
+
+We can also test empirically how the behavior policy effects the tradeoff between error and signal propagation. To do this we construct a simple experiment where we mix data from the random behavior policy with data from the medium behavior policy. Explicitly we construct a dataset $ D $ out of the datasets $ D_r$ for random and $ D_m$ for medium such that each trajectory in $ D $ comes from the medium dataset with probability $ p_m$. So for $ p_m = 0$ we have the random dataset and $ p_m = 1 $ we have the medium dataset, and in between we have various mixtures. Results are shown in Figure~\ref{fig:interp}. It takes surprisingly little data from the medium policy for one-step to outperform the iterative algorithm.
+
+
+
+\section{Discussion, limitations, and future work}
+
+This paper presents the surprising effectiveness of a simple one-step baseline for offline RL. We examine the failure modes of iterative algorithms and the conditions where we might expect them to outperform the simple one-step baseline. This provides guidance to a practitioner that the simple one-step baseline is a good place to start when approaching an offline RL problem.
+
+But, we leave many questions unanswered.
+One main limitation is that we lack a clear theoretical characterization of which environments and behaviors can guarantee that one-step outperforms multi-step or visa versa. Such results will likely require strong assumptions, but could provide useful insight. We don't expect this to be easy as it requires understanding policy iteration which has been notoriously difficult to analyze, often converging much faster than the theory would suggest \citep{sutton2018reinforcement, Agarwal2019ReinforcementLT}.
+Another limitation is that while only using one step is perhaps the simplest way to avoid the problems of off-policy evaluation, there are possibly other more elaborate algorithmic solutions that we did not consider here. However, our strong empirical results suggest that the one-step algorithm is at least a strong baseline.
+
+\side{add appendices}
+
+\printendnotes

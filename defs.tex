@@ -17,6 +17,27 @@
   }
 \usepackage{outlines}
 
+\usepackage{makecell}
+
+% \usepackage{enumitem}
+\usepackage{nicefrac}
+
+
+\usepackage{thmtools}
+\usepackage{thm-restate}
+
+\usepackage{outlines}
+
+\usepackage[T1]{fontenc}
+
+\usepackage{wrapfig}
+
+\usepackage{algorithm}
+\usepackage[noend]{algpseudocode}
+\usepackage[normalem]{ulem}
+% \usepackage[ruled, linesnumbered]{algorithm2e}
+
+
 
 
 % ----------------------------------------
@@ -57,6 +78,7 @@
 % Fonts and symbols:
 \usepackage{amsfonts}
 \usepackage{amssymb}
+\usepackage{bbm}
 
 % Set the fonts
 \RequirePackage[T1]{fontenc}
@@ -103,8 +125,26 @@
 % \usepackage{bold-extra}
 
 % Tikz
-\usepackage{tikz}
-\usetikzlibrary{matrix,arrows,positioning,calc,fit,backgrounds}
+\usepackage{pgf, tikz}
+\usetikzlibrary{arrows, automata, positioning}
+\tikzset{
+    %Define standard arrow tip
+    >=stealth',
+    %Define style for boxes
+    punkt/.style={
+           rectangle,
+           rounded corners,
+           draw=black, very thick,
+           text width=6.5em,
+           minimum height=2em,
+           text centered},
+    % Define arrow style
+    pil/.style={
+           ->,
+           thick,
+           shorten <=2pt,
+           shorten >=2pt,}
+}
 
 % To control enum item labelling/numbering
 \usepackage[shortlabels, inline]{enumitem}
@@ -164,6 +204,7 @@
 \newtheorem{proposition}[theorem]{Proposition}
 \newtheorem{lemma}[theorem]{Lemma}
 \newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{assumption}{Assumption}
 \theoremstyle{definition}
 \newtheorem{example}[theorem]{Example}
 \newtheorem{definition}[theorem]{Definition}
@@ -304,3 +345,6 @@
 %%% End:
 
 \usepackage[capitalise,nameinlink]{cleveref}
+
+\input{math_commands.tex}
+
