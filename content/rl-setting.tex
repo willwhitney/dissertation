@@ -28,7 +28,7 @@ For non-episodic environments comparisons between policies are less clear-cut; s
 
 Common practice in deep reinforcement learning is to train agents with discounting and resets, but not include the timestep in the state observations and simply ignore the transition from $s_T$ to $s_0$.
 Policies are typically evaluated by the total undiscounted reward in an episode, despite the conflict with the training setup.
-In most cases the rewards are truncated to reflect the limited episode duration \citep{schulman2017proximal,Fujimoto2018AddressingFA,haarnoja2018softA}.
+In most cases the rewards are truncated to reflect the limited episode duration \citep{schulman2017proximal,Fujimoto2018AddressingFA,haarnoja2018soft}.
 Since the agent is unable to tell when an episode will end, this effectively introduces noise into value prediction targets, and this noise varies by state depending on how often the agent has ended an episode on that state.
 In other cases value targets may be bootstrapped from the state $s_T$ as if the environment were not episodic.
 This has two issues: (1) it introduces bias by treating an estimate of $V(s_T)$ as the true value, when in some states and environments this estimate may never be updated; and (2) by pretending the environment has no resets, it introduces a mismatch between the training and test objectives.\endnote{This mismatch is decreased if the divergence between the distributions $P(s_T, \pi(\cdot \mid s_T))$ and $s_0$ is smaller. Like most problems in RL, it also becomes smaller if smaller discount factors are used. However in general there are actions which would provide more short-term reward, and thus perform better toward the end of an episode, than the infinite-horizon optimal actions.}
@@ -89,7 +89,7 @@ It is also related to the iterative technique of fitted Q iteration \citep{Ernst
 
 Crucially, this setting is the one used in practice in nearly every application of reinforcement learning.
 RL algorithms are not yet safe and reliable enough to allow them to update a policy on the fly, especially with a physical system which may be damaged or cause injury.
-Furthermore, most works studying RL implicitly provide results in this setting by evaluating according to a different policy than the one used for training, for example showing learning curves with a deterministic policy \citep{Mnih2015HumanlevelCT,Lillicrap2016ContinuousCW,Fujimoto2018AddressingFA,haarnoja2018softA}.
+Furthermore, most works studying RL implicitly provide results in this setting by evaluating according to a different policy than the one used for training, for example showing learning curves with a deterministic policy \citep{Mnih2015HumanlevelCT,Lillicrap2016ContinuousCW,Fujimoto2018AddressingFA,haarnoja2018soft}.
 Comparisons of final, large-data performance similarly reflect this setting \citep{Silver2016MasteringTG,Vinyals2019GrandmasterLI,openai2019dota,OpenAI2019SolvingRC}.
 
 

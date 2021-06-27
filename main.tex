@@ -50,10 +50,10 @@
 % Uncomment to get a big black box to spot "overfull hboxes"
 % \setlength{\overfullrule}{5pt}
 
-
+\usepackage[dvipsnames,table,prologue]{xcolor}
 
 %% Color definitions:
-\RequirePackage[prologue]{xcolor}
+% \RequirePackage[prologue]{xcolor}
 \definecolor[named]{ThesisBlue}{cmyk}{1,0.1,0,0.1}
 \definecolor[named]{ThesisYellow}{cmyk}{0,0.16,1,0}
 \definecolor[named]{ThesisOrange}{cmyk}{0,0.42,1,0.01}
@@ -277,6 +277,14 @@
 \newpage
 
 
+%%%%% List of Appendices %%%%%%%%%%%%%
+\cleardoublepage
+\phantomsection
+\addcontentsline{toc}{chapter}{List of Appendices}
+\listofappendices
+\newpage
+
+
 %%%%% Body of thesis starts %%%%%%%%%%%%
 \pagenumbering{arabic} % switches page numbering to arabic: 1, 2, 3, etc.
 
@@ -298,7 +306,7 @@
 \bibliographystyle{apalike}
 \addcontentsline{toc}{chapter}{Bibliography}
 
-\bibliography{references-merged}
+\bibliography{references-merged-repr}
 
 
 

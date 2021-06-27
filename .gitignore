@@ -288,3 +288,6 @@ TSWLatexianTemp*
 #*Notes.bib
 
 **.DS_Store
+
+# list of appendices intermediate file
+*.apc

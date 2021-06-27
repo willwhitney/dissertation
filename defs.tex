@@ -22,6 +22,14 @@
 % \usepackage{enumitem}
 \usepackage{nicefrac}
 
+% Good AMS stuff:
+\usepackage{amsthm} % facilities for theorem-like environments
+\usepackage[tbtags]{amsmath} % a lot of good stuff!
+
+% Fonts and symbols:
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{bbm}
 
 \usepackage{thmtools}
 \usepackage{thm-restate}
@@ -31,10 +39,14 @@
 \usepackage[T1]{fontenc}
 
 \usepackage{wrapfig}
+% \usepackage[subfigure]{tocloft}
+\usepackage{tocloft}
 
 \usepackage{algorithm}
 \usepackage[noend]{algpseudocode}
 \usepackage[normalem]{ulem}
+
+\usepackage[title]{appendix}
 % \usepackage[ruled, linesnumbered]{algorithm2e}
 
 
@@ -63,6 +75,13 @@
 
 
 
+\newcommand{\listappendicesname}{List of Appendices}
+\newlistof{appendices}{apc}{\listappendicesname}
+\newcommand{\appendixcontent}[1]{\addcontentsline{apc}{appendices}{#1}}
+
+\newcommand{\newappendix}[1]{\section{#1}\appendixcontent{\hspace{13pt} \hbox to26pt{\thesection} #1}}
+
+
 % Graphics:
 \usepackage[final]{graphicx}
 %\usepackage{graphicx} % use this line instead of the above to suppress graphics in draft copies
@@ -70,15 +89,6 @@
 
 % Uncomment this to indent first line of each section:
 % \usepackage{indentfirst}
-
-% Good AMS stuff:
-\usepackage{amsthm} % facilities for theorem-like environments
-\usepackage[tbtags]{amsmath} % a lot of good stuff!
-
-% Fonts and symbols:
-\usepackage{amsfonts}
-\usepackage{amssymb}
-\usepackage{bbm}
 
 % Set the fonts
 \RequirePackage[T1]{fontenc}
@@ -104,7 +114,9 @@
 % Page formatting utility:
 %\usepackage{geometry}
 
-\usepackage{booktabs}   %% For formal tables:
+\usepackage{booktabs}
+    \setlength{\abovetopsep}{5pt}
+% \usepackage{booktabs}   %% For formal tables:
                         %% http://ctan.org/pkg/booktabs
 \usepackage[labelformat=simple]{subcaption} %% For complex figures with subfigures/subcaptions
                         %% http://ctan.org/pkg/subcaption
@@ -116,6 +128,7 @@
 
 \usepackage{amssymb}
 %\usepackage[table]{xcolor}
+
 
 % For code
 \usepackage[final]{listings}
