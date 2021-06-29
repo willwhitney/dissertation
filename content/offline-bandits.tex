@@ -468,7 +468,7 @@ To confirm (1) and (2) listed above we conduct two experiments. First, to test t
 
 \begin{figure}
     \centering
-    \includegraphics[width=0.3\textwidth]{figures/offline-bandits/toy_regret_bar.pdf}
+    \includegraphics[width=0.6\textwidth]{figures/offline-bandits/toy_regret_bar.pdf}
     \caption{Estimated bandit error by averaging the values calculated on the held-out test sets for 50 independently sampled datasets. Error bars show one standard deviation. While policy-based learning has high bandit error, value-based learning has essentially zero bandit error.}
     \label{fig:toy_regret}
 \end{figure}
@@ -489,7 +489,7 @@ As explained in Section \ref{sec:stable}, the policy-based objective is stable i
 
 \begin{figure}
     \centering
-    \includegraphics[width=0.48\textwidth]{figures/offline-bandits/cifar_regret_bar.pdf}
+    \includegraphics[width=0.75\textwidth]{figures/offline-bandits/cifar_regret_bar.pdf}
     \caption{Estimated regret decomposition on CIFAR with uniform behavior (left) and the hand-crafted behavior of \citet{joachims2018deep} (right). We see that the value-based learning has lowest bandit error and unstable policy-based learning the most. On the hand-crafted dataset the stable policy-based algorithm performs as well as value-based learning.}
     \label{fig:cifar_regret}
 \end{figure}

@@ -509,7 +509,7 @@ However, \algshort{} leaves the task policy unbiased in the few-sample regime by
 A variety of work proposes to speed up $\epsilon$-greedy exploration via temporally-extended actions which reduce dithering.
 Some methods \citep{Schoknecht2003ReinforcementLO,neunert2020continuousdiscrete} propose to bias policies towards repeating primitive actions, resulting in faster exploration without limiting expressivity.
 \citet{Dabney2020TemporallyExtendedE} describe a temporally-extended version of $\epsilon$-greedy exploration which samples a random action and a random \emph{duration} for that action.
-\citet{Whitney2020DynamicsawareE} use a learned temporally-extended action space representing the reachable states within a fixed number of steps.
+\citet{Whitney2020Dynamics-Aware} use a learned temporally-extended action space representing the reachable states within a fixed number of steps.
 While these methods improve over single-step $\epsilon$-greedy, they are unable to perform directed exploration or discover faraway states.
 
 

@@ -1,0 +1,23 @@
+For reinforcement learning to be practical to use on physical systems such as robots, there is no property more important than sample efficiency.
+The work contained in this thesis represents a small step towards RL algorithms for robotic control that require less data collection.
+\Cref{sec:exploration} proposed a new technique for collecting diverse data more rapidly while simultaneously approximating the optimal policy.
+\Cref{sec:representation} described the role of representation and inductive bias in machine learning and proposed a representation learning objective specifically designed to improve sample efficiency in reinforcement learning.
+\Cref{sec:offline} studied the problem of finding as good a policy as possible given a fixed dataset, examining the limits of reinforcement learning without data collection.
+These represent three different thrusts towards sample-efficient RL: collecting more informative data, using representations to generalize better, and learning policies without collecting data at all.
+
+From here there are many exciting future directions.
+Using the decoupled policy learning technique from \Cref{sec:deep}, alternative exploration bonuses could capture prior knowledge about a task or environment without biasing the final policy.
+This could lead to significantly more directed exploration, overcoming the need to visit every possible transition in an MDP.
+
+Representation learning for reinforcement learning has seen a flurry of progress after the publication of \Cref{sec:dyne}.
+Contrastive methods have seen significant success using explicit representation learning or implicitly via data augmentation \citep{Srinivas2020CURLCU,laskin2020reinforcement,Kostrikov2021ImageAI}.
+Representation learning based on causal principles and invariances have also resulted in intriguing possibilities \citep{Zhang2020InvariantCP,Zhang2021LearningIR}.
+A major limitation of the representations learned in \Cref{sec:dyne} is that they are trained on data coming from a uniformly random behavior policy; by using directed exploration, better representations can be learned, as proposed in \citep{Yarats2021ReinforcementLW}.
+
+The batched single-step policy improvement operator discussed in \Cref{sec:offline-rl} is conservative, and thus on its own not ideally suited for settings with data collection.
+However, by coupling it with an efficient directed exploration technique such as the one proposed in \Cref{sec:deep}, such a conservative policy improvement could lead to better policy performance on limited data.
+Future work may also tackle the problem of accumulating error with iterative policy optimization and value estimation that we observed in that chapter.
+
+While there is a long way to go before it is practical to train RL agents from scratch on physical robots, there are many promising avenues before us.
+The next few years will see reinforcement learning advance from an interesting research problem to a commonplace tool, and new techniques for sample-efficient reinforcement learning will play a decisive role.
+

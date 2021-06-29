@@ -1,1 +1,14 @@
-Introduction to offline RL.
+Where the first two parts of this thesis discuss the full reinforcement learning problem, where data collection and policy optimization are interleaved, this part focuses on the challenge of policy optimization alone.
+To do this, we now switch to the \emph{batch} or \emph{offline} setting, where first a dataset is collected according to some behavior policy, then an algorithm uses that data to produce the best policy it can.
+The offline RL setting is ideal for studying how much information about the optimal policy an agent can gain from a particular sample of data, one of the fundamental questions of sample complexity in RL.
+If the challenges inherent in offline RL could be overcome, it would also enable policy learning using logged data alone, without any marginal cost of sample collection per experiment.
+
+This setting is extremely restrictive due to the difficulty of generalization.
+When distribution of the training data places low weight on an action which a learned model estimates to have high value, it could either be that (i) the action truly is good, or (ii) the estimate is faulty due to having observed few transitions nearby.
+Traditional RL approaches resolve this dichotomy by collecting more data near promising transitions, thereby producing increasingly-confident predictions around desirable regions of the environment.
+The offline setting forces us to grapple with the limitations of generalization directly, asking "What is the best performance possible given only this training data?"
+
+This part of the thesis contains two chapters studying the problems of generalization in offline RL.
+The first chapter discusses how the use of overparameterized models interacts with the offline setting by using the simplest RL problem requiring function approximation: contextual bandits.
+The second chapter moves to the full offline reinforcement learning setting and studies how the compounding of errors limits the generalization ability of iterative policy optimization algorithms.
+Together these chapters describe the promise and the limitations of reinforcement learning on logged data, providing a foundation for future work which squeezes as much performance improvement as possible out of every sample.

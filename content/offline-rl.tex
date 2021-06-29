@@ -610,7 +610,7 @@ We are not familiar with similar guarantees for the iterative or multi-step appr
 \paragraph{Data.} We use the datasets from the D4RL benchmark \citep{fu2020d4rl}. We use the latest versions, which are v2 for the mujoco datasets and v1 for the adroit datasets.
 
 \paragraph{Hyperparameter tuning.}
-\begin{wraptable}[8]{r}{0.6\textwidth}
+\begin{table}[ht]
 \vspace{-0.2cm}
     \centering
     \caption{Hyperparameter sweeps for each algorithm.}
@@ -629,7 +629,7 @@ We are not familiar with similar guarantees for the iterative or multi-step appr
     \end{tabular}
     \end{small}
     \label{tab:hyperparams}
-\end{wraptable}
+\end{table}
 We follow the practice of \cite{fu2020d4rl} and tune a small set of hyperparameters by interacting with the simulator to estimate the value of the policies learned under each hyperparameter setting. The hyperparameter sets for each algorithm can be seen in Table \ref{tab:hyperparams}.
 
 This may initially seem like ``cheating'', but can be a reasonable setup if we are considering applications like robotics where we can feasibly test a small number of trained policies on the real system. Also, since prior work has used this setup, it makes it easiest to compare our results if we use it too. While beyond the scope of this work, we do think that better offline model selection procedures will be crucial to make offline RL more broadly applicable. A good primer on this topic can be found in \cite{paine2020hyperparameter}.

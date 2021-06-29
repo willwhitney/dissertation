@@ -1,1 +1,36 @@
+By leveraging advances in deep learning, reinforcement learning (RL) has recently made such advances that for any task which has a simulator, and thus enables the collection of nearly unlimited data, it might now be expected to yield superhuman performance.
+However, many practically relevant tasks take place in the physical world.
+Constructing physical simulators of sufficient fidelity and correspondence to transfer is a non-trivial challenge, so for the majority of physical tasks at least some amount of training on real data is required.
+Collecting data in the real world is sufficiently expensive that it makes up much of the cost of training a reinforcement learning agent.
+
+This thesis focuses on improving the sample efficiency of reinforcement learning in order to make them more practical to use on physical systems.
+It includes three approaches to this goal.
+The first part studies the data collection process, and in particular the opportunity for exploration to improve the sample efficiency of RL.
+The second part considers the use of representation learning to improve generalization, and thus sample efficiency, in reinforcement learning.
+The third part examines the offline RL setting, which consists of pure policy optimization using a fixed dataset and therefore does not require additional data collection.
+
+Taken together, this work studies techniques for improving the sample efficiency of reinforcement learning by collecting data which is more useful and diverse, then learning more from every sample.
+It represents an early step on the path to RL as an everyday tool for control of physical systems.
+
+
+% This thesis focuses on improving the sample efficiency of reinforcement learning in order to make them more practical to use on physical systems.
+% It comprises three approaches to this goal.
+
+% The first part studies the data collection process, and in particular the lack of impact that directed exploration methods have had on sample-efficient RL.
+% By performing exploration with continually-updated bonuses and learning separate task and exploration policies, it finds that exploration can significantly reduce the sample requirements of RL, especially with sparse rewards.
+
+% The second part considers the use of representation learning to improve generalization, and thus sample efficiency, in reinforcement learning.
+% It proposes a representation learning objective which leverages the dynamics of the environment along with a modified RL algorithm for its temporally-abstract actions.
+
+% The third part examines the offline RL setting, in which agents learn from a fixed dataset and therefore do not require additional data collection.
+% It studies the limitations of commonly-used methods while proposing surprisingly effective simple baselines, providing insight into the challenges posed by this setting.
+
+
+
+% Reinforcement learning, which studies the challenge of decision-making in an uncertain environment, was for many years limited to simple tasks.
+% In recent years progress in deep learning has enabled reinforcement learning to scale to dramatically larger tasks and consume proportionally more data.
+% These advances have been so decisive that for any task which has a simulator, and thus enables the collection of nearly unlimited data, reinforcement learning might now be expected to yield superhuman performance.
+
+% However, many practically relevant tasks take place in the physical world.
+% Constructing physical simulators of sufficient fidelity and correspondence to transfer is a non-trivial challenge, so for the majority of physical tasks at least some amount of training on real data is required.
 

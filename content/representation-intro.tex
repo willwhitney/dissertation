@@ -1,1 +1,35 @@
-Introduction to representation for RL.
+The significance of representation has loomed large in the history of machine learning, especially in the neural networks community.
+With a fixed, small hypothesis class, the selection of one representation or another can be the difference between a realizeable solution and an unreachable one.
+For instance, a linear model cannot perform the XOR operation on two variables when given those raw variables as input.
+However, given a one-hot representation of which quadrant a point occupies, the linear model performs perfectly.
+In classical machine learning with underparameterized models and global optimization, this was the main role of representation: to permit or rule out any given solution.
+
+With the advent of large-scale overparameterized models such as deep networks, representation instead affects the sample efficiency of learning an optimal predictor.
+In this regime, the hypothesis class is sufficiently large to fit arbitrary training data to zero loss, so training could in principle produce any predictor function which fits that limited sample of data.
+As the amount of training data increases this solution set becomes increasingly constrained and (for any reasonable model class) the predictor approaches the true optimal predictor.
+However, the number of samples this requires depends on how the inductive bias of the learning algorithm interacts with the representation of the data.
+Much work has focused on mapping out the inductive biases present in deep networks \citep{soudry2018,Ulyanov2018DeepIP,rahaman2019spectral,vallepérez2019deep,Shah2020ThePO}.
+This work studies a complementary question: what representations match well with those inductive biases?
+
+
+% Generalization, or the performance of the model on held-out data, becomes the main problem.
+
+
+% Where in the small-model regime simply fitting the data is the main challenge, in the large-model regime the challenge is \emph{generalization}, or the performance of the model on held-out data from the same distribution.
+
+% For overparameterized models, each point in the training data can in principle be treated as unique and independent of every other.
+% However, this leads to arbitrarily poor generalization; such a model has no inductive bias, and its behavior is undefined between the training data.
+% Instead we construct models with inductive biases which treat some points in the data as more similar to one another, and it is here that representation plays its part.
+
+% When trained with different representations of a single dataset, deep networks may learn very different solutions.
+% A well-matched representation and inductive bias can lead to a solution which generalizes well, while poorer representations have poor generalization.
+% In the limit of infinite data these differences wash out and any representation is sufficient, but the rate at which an algorithm converges to the optimal solution is affected by the choice of representation.
+
+
+
+
+This part of the thesis describes this relationship between representation and sample complexity.
+In the first chapter I present two methods for evaluating the quality of a given representation using measures based on the amount of information which a predictor extracts from a dataset.
+These measures have close parallels to concepts from reinforcement learning, with one analogous to regret in the online setting and the other analogous to sample complexity in the train-and-deploy or offline settings.
+In the second chapter I introduce a method for learning representations for reinforcement learning which place functionally similar states and actions close together.
+This method results in improved sample efficiency on a variety of continuous control problems.

@@ -291,3 +291,6 @@ TSWLatexianTemp*
 
 # list of appendices intermediate file
 *.apc
+
+# table of contents intermediate file
+*.toc

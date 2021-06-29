@@ -37,7 +37,7 @@ However, it does not introduce noise.
 More fundamentally, practically all discounted policy gradient algorithms drop the discounting term from the state distribution.
 \citet{Nota2020IsTP} show that this results in following a direction which is not the gradient of any function, and which is not guaranteed to converge to a good solution with respect to the discounted or undiscounted objectives.
 While this is deeply worrying, these methods frequently work well in practice.
-This may be due to their usage with overparameterized neural network models, which are largely invariant to a reweighting of the data \citep{byrd2018effect,brandfonbrener2021offline}.
+This may be due to their usage with overparameterized neural network models, which are largely invariant to a reweighting of the data \citep{byrd2018effect,brandfonbrener2021offlinecontextual}.
 
 % This thesis focuses on the episodic setting.
 % Following common practice in deep reinforcement learning, agents are trained with algorithms which use $\gamma < 1$, but evaluated according to the total reward earned in an episode.
@@ -49,7 +49,7 @@ We say that a policy $\pi$ is $\varepsilon$-optimal if $V^*(s_0) \le V^\pi(s_0) 
 Define $\bm{\pi} = A(\mdp, i)$ to be the policy obtained by running the agent (i.e. algorithm) $A$ in the environment $\mdp$ for $i$ timesteps, being careful to note that the policy $\bm{\pi}$ is itself a random variable due to the randomness in the experience collected in those $i$ steps.
 Let the \emph{sample complexity} of learning a $\varepsilon$-optimal policy on $\mdp$ with $A$ be the expected number of steps (indexed as $i$) such that
 \begin{align}
-    V^{\pi_i}(s_0) < V^*(s_0) \le - \varepsilon, && \text{where } \pi_i = A(\mdp, i).
+    V^{\pi_i}(s_0) < V^*(s_0) - \varepsilon, && \text{where } \pi_i = A(\mdp, i).
 \end{align}
 This definition is related to those proposed by \citet{Fiechter1994EfficientRL} and \citet{strehl2008analysis} for PAC learning.
 Sometimes it is also useful to consider the "anytime" performance of an algorithm $A$ on an MDP $\mdp$.
@@ -64,7 +64,7 @@ The online and offline settings are perhaps the most studied in the theory commu
 
 
 \paragraph{The online setting.}
-\side{talk about sample complexity}
+% \side{talk about sample complexity}
 Here an RL agent learns by continually interacting with the environment with the goal of maximizing the total reward earned across all time.
 This gives rise to the explore-exploit tradeoff when acting: at each moment, the agent may choose to take an action which is uninformative but leads to greater short-term reward, or one which will yield more information at the cost of lower reward.
 The objective for this setting is to minimize the rate of accumulation of \emph{regret}, which measures the difference between the total reward obtained by an optimal policy and the agent:
@@ -72,10 +72,10 @@ The objective for this setting is to minimize the rate of accumulation of \emph{
     L(A, \mdp, T) = \E \left[ \sum_{i=1}^T R(s^*_i, a^*_i) - R(s_i, a_i) \right].
 \end{align}
 This setting is appropriate when an agent is being trained "on the job," where mistakes early in learning have just as much deleterious effect as those made later.
-
+In this context, sample efficiency controls the total amount of regret the agent will accumulate.
 
 \paragraph{The learn-and-deploy setting.}
-\side{talk about sample complexity}
+% \side{talk about sample complexity}
 This setting consists of distinct learning and deployment phases.
 In the learning phase, the agent is not required to perform well and may collect whatever data is most informative.
 In the deployment phase, the policy is fixed and should be as close to optimal as possible.
@@ -92,14 +92,18 @@ RL algorithms are not yet safe and reliable enough to allow them to update a pol
 Furthermore, most works studying RL implicitly provide results in this setting by evaluating according to a different policy than the one used for training, for example showing learning curves with a deterministic policy \citep{Mnih2015HumanlevelCT,Lillicrap2016ContinuousCW,Fujimoto2018AddressingFA,haarnoja2018soft}.
 Comparisons of final, large-data performance similarly reflect this setting \citep{Silver2016MasteringTG,Vinyals2019GrandmasterLI,openai2019dota,OpenAI2019SolvingRC}.
 
+In this setting, sample efficiency reflects the amount of data the agent needs to collect during training time before it can perform near-optimally at deployment time.
+
 
 \paragraph{The offline setting.}
-\side{talk about sample complexity}
+% \side{talk about sample complexity}
 Also known as the \emph{batch} setting, this consists only of pure policy optimization given a fixed dataset of environment interactions collected by an extrinsic behavior policy.
 After learning from this data in whatever way it sees fit, an algorithm produces a fixed policy with the objective of earning as much reward as possible.
 Though described as a reinforcement learning setting, it does not include any actual reinforcement as the agent never learns from its own interactions with the environment.
 However, this makes the offline RL setting uniquely valuable for isolating how much can be learned from particular data.
 This setting is also appealing as it would in principle allow an agent to be trained in a risk-free way by using data collected from a safe policy, and for free (in terms of samples) if data from one experiment can be repurposed as training data for another.\endnote{While there are doubtless some settings where this cross-task data reuse is possible, it has quite clear limits. For a policy to be trained to solve task B using data collected from task A, the policy used for task A would have had to actually also solve task B. It could have been done piecewise rather than in a single good trajectory, but unless the tasks are extremely similar it is vanishingly unlikely. Perhaps a more practical application would be to start with a safe but poor policy for solving a task, then incrementally collect new data, refine the policy using offline RL, validate that the new policy is also safe, and then collect data once more.}
+For this setting, sample efficiency must be redefined to include the behavior policy under which the data was collected.
+It then reflects the minimum amount of data collected under that behavior policy required for a particular algorithm to recover the optimal policy.\endnote{Note that this quantity of data should be expected to be extraordinarily large for most behavior policies.}
 
 % \side{break into \textbackslash paragraphs}
 % \side{write math definitions}
@@ -115,7 +119,7 @@ This setting is also appealing as it would in principle allow an agent to be tra
 % \end{itemize}
 
 
-\side{Do I want a section on simulated versus physical envs?}
+% \side{Do I want a section on simulated versus physical envs?}
 % \section{Simulated and Physical Environments}
 
 
